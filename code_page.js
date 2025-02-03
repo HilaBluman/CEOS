@@ -20,14 +20,13 @@ function saveInput(event,action) {
     const lines = codeEditor.textContent.split('\n');
     const row = cursorPosition.row
     const currentLine = lines[row];
+    const linesLength= lines.length
     
     // Save the input and the row (you can replace this with your saving logic)
-    console.log(`Input: ${currentLine} Row: ${cursorPosition.row + 1}`);
-
     if (!action){
         action = "update"}
 
-    const modificaion = JSON.stringify({currentLine, row, action});
+    const modificaion = JSON.stringify({currentLine, row, action,linesLength});
     console.log(`modificaion: ${modificaion}`);
     const filename = document.getElementById('file-name').textContent;
 
@@ -70,14 +69,12 @@ function getCursorPosition(element) {
 // Event listener for input changes
 codeEditor.addEventListener('input', function(event) {
     updateLineNumbers();
-    if(event.data === '\n')
-        saveInput(event,'insert');
     saveInput(event);
 });
 
 
 // Add event listeners to update line numbers
-//codeEditor.addEventListener('input', updateLineNumbers);
+
 codeEditor.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
         requestAnimationFrame(updateLineNumbers);

@@ -170,7 +170,7 @@ def get_countent_len(client_socket, headers_data):
     return match.group(1)
 
 
-def modify_file(row, action, content, file_path):
+def modify_file(row, action, content, file_path, new_lines_length):
     try:
         with open(file_path, 'r', encoding='utf-8', newline=None) as file:
             lines = file.readlines()  # Read all lines into a list
@@ -182,25 +182,25 @@ def modify_file(row, action, content, file_path):
 
         if action == 'delete':
             print(f"Attempting to delete row: {row} from {len(lines)} ")  
-            if 0 <= row <= len(lines):  # Change to < instead of <=
+            if 0 <= row < len(lines):  # Change to < instead of <=
                 del lines[row - 1]
             else:
                 raise ValueError("Row number is out of bounds.")
-
-        elif action == 'insert':
-            print(f"Attempting to insert at row: {row}") 
-            if 0 <= row <= len(lines):  # Allow insertion at the end
-                lines.insert(row, content + '\n\r')  # Ensure new line is added
-            else:
-                raise ValueError("Row number is out of bounds for insertion.")
             
         elif action == 'update':
-            print(f"Attempting to update row: {row}")  
-            if 0 <= row <= len(lines):  # Change to < instead of <=
-                lines[row] = content #+ "\n\r"  # Ensure new line is added
+            if new_lines_length > len(lines):
+                print(f"Attempting to insert: {row}")
+                if row >= len(lines):
+                    print(f"at end of file: {row}")
+                    content = "\n\r" + content
+                lines.insert(row, content)  
+            elif 0 < row < len(lines): 
+                print(f"Attempting to update line : {row}")
+                lines[row] = content 
             else:
                 raise ValueError("Row number is out of bounds for modification.")
-
+            
+            
         else:
             raise ValueError("Unsupported action. Use 'delete', 'insert' or 'update'")
         
@@ -259,7 +259,7 @@ def handle_client(client_socket, client_address, num_thread):
                         action = modification['action']
                         try:
                             print(f"trying: {row}, {action}, {currentLine}, {file_path} ")
-                            modify_file(row, action, currentLine, file_path)
+                            modify_file(row, action, currentLine, file_path,modification['linesLength'])
                             msg = "File modified successfully."
                         except Exception as e:
                             msg = f"Error modifying file: {str(e)}"
