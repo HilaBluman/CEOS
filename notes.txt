@@ -1,0 +1,22 @@
+LCS - Longest Common Subsequence:
+1. https://www.geeksforgeeks.org/longest-common-subsequence-dp-4/
+2. https://interviewing.io/questions/longest-common-subsequence
+3. most efficient solved for finding the LCS is with a matrix because it breaks down the problam to smaller problams and it
+allowes for backtrucks of the LCS.
+
+fix:
+when going down a line in the mid of a row it deletes the content before
+new line without content (does not work)
+delete half works.(maybe change so when i prees on delete it will check if the line is emty )
+other client can't see the output of the other client
+other client can edit the file
+
+do:
+
+check if it works with pasting code.
+add syntexs highlites.
+what is async???
+maybe create websockets, on the python side and use ready lib in js. (probbly will not)
+
+done:
+change to use actions insted of sending all the countent like delete (number row),change (this row), add a row and more.

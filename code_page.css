@@ -1,0 +1,222 @@
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    background-color: #1e1e1e;
+    color: #ffffff;
+}
+.editor-container {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    background-color: #1e1e1e;
+}
+.editor {
+    flex-grow: 1;
+    min-width: 200px;
+    max-width: 80%;
+    display: flex;
+    flex-direction: column;
+    background-color: #1e1e1e;
+    color: #ffffff;
+    overflow: hidden;
+    padding: 0;
+}
+.editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background-color: #1e1e1e;
+    border-bottom: 1px solid #333;
+    font-size: 20px;
+}
+.editor-header .file-name {
+    font-size: 18px;
+    background-color: #3c3c3c;
+    padding: 4px 12px;
+    border-radius: 15px;
+    margin-bottom: -1px;
+    z-index: 1;
+    position: relative;
+}
+.editor-content {
+    display: flex;
+    flex: 1;
+    overflow: auto;
+}
+.line-numbers {
+    background-color: #2d2d2d;
+    padding: 10px;
+    text-align: right;
+    user-select: none;
+    width: 10px;
+}
+.line-numbers div {
+    line-height: 1.5em;
+    height: 1.5em;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    color: #858585;
+}
+.code-area {
+    flex: 1;
+    position: relative;
+}
+.code-area pre {
+    margin: 0;
+    padding: 10px;
+}
+.code-area code {
+    display: block;
+    white-space: pre;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    outline: none;
+}
+.output-container {
+    width: 300px;
+    min-width: 150px;
+    max-width: 80%;
+    background-color: #1e1e1e;
+    color: #ffffff;
+    padding: 10px;
+    border-left: 1px solid #333;
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+.output-container .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid #333;
+}
+.output-container .header .title {
+    font-size: 14px;
+}
+.output-container .header .buttons {
+    display: flex;
+    gap: 10px;
+}
+.button {
+    background-color: #ff4081;
+    border: none;
+    color: #ffffff;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: 3px;
+}
+.button:hover {
+    background-color: #f50057;
+}
+.output-container .output {
+    margin-top: 10px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Prism.js theme overrides */
+.code-area .token.comment,
+.code-area .token.prolog,
+.code-area .token.doctype,
+.code-area .token.cdata {
+    color: #6a9955;
+}
+.code-area .token.punctuation {
+    color: #d4d4d4;
+}
+.code-area .token.property,
+.code-area .token.tag,
+.code-area .token.boolean,
+.code-area .token.number,
+.code-area .token.constant,
+.code-area .token.symbol,
+.code-area .token.deleted {
+    color: #b5cea8;
+}
+
+.hidden {
+    display: none;
+}
+
+.filename-input {
+    width: 100%;
+    padding: 2px 5px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+.file-name-input {
+    border: none;
+    background: transparent;
+    font-size: inherit;
+    font-family: inherit;
+    color: inherit;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    outline: none;
+}
+
+.editor-wrapper {
+    display: flex;
+    min-height: min-content;
+    width: 100%;
+}
+
+.resize-handle {
+    width: 10px;
+    background-color: #333;
+    cursor: col-resize;
+    transition: background-color 0.2s;
+    position: relative;
+    z-index: 1000;
+    flex-shrink: 0;
+}
+
+.resize-handle:hover {
+    background-color: #666;
+}
+
+/* Prevent text selection while resizing */
+body.resizing {
+    user-select: none;
+    cursor: col-resize;
+}
+
+/* Add these styles for notifications */
+@keyframes fadeOut {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 10px 20px;
+    border-radius: 5px;
+    z-index: 1000;
+    animation: fadeOut 3s forwards;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.notification.success {
+    background: #4CAF50;
+    color: white;
+}
+
+.notification.warning {
+    background: #f44336;
+    color: white;
+}
+
+.notification.offline {
+    background: #ff9800;
+    color: white;
+}
