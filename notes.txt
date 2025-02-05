@@ -1,20 +1,24 @@
-fix:
-new line without content (does not work)
-delete half works.(maybe change so when i prees on delete it will check if the line is emty )
-
-other client can't see the output of the other client
+create:
+add syntexs highlites.
+what is async??? (read about it)
+other client can see the output of the other client
 other client can edit the file
+? maybe create websockets, on the python side and use ready lib in js. (probbly will not)
 
 bugs:
+⚪️ when pasting only pastes the line the curser waas on (maybe use the LCS here? or find other solution)
+⚪️ delete half works, works when deleting in line but not sure about deleting a row..(maybe change so when i prees on delete it will check if the line is emty )
+⚪️ it gets stuck after few inputs!!!
+⚪️ when it disconnect i get these errors in the console log 1. Failed to load resource: net:ERR_CONTENT_LENGTH_MISMATCH  2. Error saving file: TypeError: Failed to fetch
+saveInput. it happens when Timeout while receiving headers
 ✔️ when adding a new line in the mid of a file the data after deletes. ( added "\r")
 ✔️ when updating a line the rest of the data after said line.
-⚪️ it gets stuck after few inputs!!!
+✔️ new line without content
+
 
 do:
+✔️ debounce - When the debounced function is called, it first clears any existing timeout. This means that if the function is called multiple times in quick successionit will only be executed once, after the last call.
 ✔️ check if it works with pasting code.
-add syntexs highlites.
-what is async???
-? maybe create websockets, on the python side and use ready lib in js. (probbly will not)
 ✔️ change to use actions insted of sending all the countent like delete (number row),change (this row), add a row and more.
 
 

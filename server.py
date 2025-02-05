@@ -189,6 +189,7 @@ def modify_file(row, action, content, file_path, new_lines_length):
             
         elif action == 'update':
                 if new_lines_length > len(lines):
+                    print(f"lines: {len(lines)} new lines: {new_lines_length} ")
                     print(f"Attempting to insert: {row}")
                     if row >= len(lines):
                         print(f"at end of file: {row}")
@@ -206,16 +207,6 @@ def modify_file(row, action, content, file_path, new_lines_length):
                     lines[row] = content + "\r"
         else:
             raise ValueError("Row number is out of bounds for modification.")
-            
-        """elif action == 'update':
-            if row >= len(lines):
-                print(f"Attempting to insert at end of file: {row + 1}")
-                lines.insert(row + 1, content + "\n\r")
-            elif 0 <= row < len(lines): 
-                print(f"Attempting to update line : {row}")
-                lines[row] = content + "\r"
-            else:
-                raise ValueError("Row number is out of bounds for modification.")"""
         
         with open(file_path, 'w', encoding='utf-8') as file:
             file.writelines(lines)
@@ -239,13 +230,15 @@ def handle_client(client_socket, client_address, num_thread):
         while True:
             print("while")
             try:
-                client_socket.settimeout(300) 
-                action = client_socket.recv(4).decode()
-                client_socket.settimeout(None)  
-                print(f"Client {client_address} wants to: '{action}'")
+                #client_socket.settimeout(300) 
+                #action = client_socket.recv(4).decode() # can get less than 4
+                #client_socket.settimeout(None)  
+                #print(f"Client {client_address} wants to: '{action}'")
 
                 data = receive_headers(client_socket)
-                headers_data = data.decode()
+                action = data.decode()[:4]
+                print(f"Client {client_address} wants to: '{action}'")
+                headers_data = data.decode()[4:]
                 print("------------------")
                 print("Client sent headers:" + headers_data)
                 print("------------------")
@@ -391,11 +384,15 @@ def handle_client(client_socket, client_address, num_thread):
                         handle_500(client_socket)
 
                 else:
-                    print("received unknown action!")
+                    print("received unknown action! action:" + action)
                     break  # Exit the loop if an unknown action is received
 
             except ConnectionResetError:
                 print(f"Connection reset by peer: {client_address} in thread {num_thread}")
+                break
+            except Exception as e:
+                print(f"Error handling client {client_address}: {str(e)}")
+                break
 
     finally:
         client_socket.close()
@@ -419,7 +416,7 @@ def main():
             num_thread = num_thread + 1
 
             # Create a new thread to handle the client
-            client_thread = threading.Thread(target=handle_client, args=(client_socket, client_address, num_thread))
+            client_thread = threading.Thread(target=handle_client, args=(client_socket, client_address, num_thread), daemon=True)
             client_thread.start()
 
         except Exception as e:
