@@ -6,6 +6,7 @@ other client can edit the file
 ? maybe create websockets, on the python side and use ready lib in js. (probbly will not)
 
 bugs:
+⚪️ updating first line (0) odes not work? 
 ⚪️ when pasting only pastes the line the curser waas on (maybe use the LCS here? or find other solution)
 ⚪️ delete half works, works when deleting in line but not sure about deleting a row..(maybe change so when i prees on delete it will check if the line is emty )
 ⚪️ it gets stuck after few inputs!!!
@@ -18,9 +19,11 @@ saveInput. it happens when Timeout while receiving headers
 
 do:
 ✔️ debounce - When the debounced function is called, it first clears any existing timeout. This means that if the function is called multiple times in quick successionit will only be executed once, after the last call.
-✔️ check if it works with pasting code.
+✔️ pasting code in one line.
 ✔️ change to use actions insted of sending all the countent like delete (number row),change (this row), add a row and more.
 
+check on:
+⚪️ need protction from code & SCL injctions. 
 
 
 LCS - Longest Common Subsequence:
