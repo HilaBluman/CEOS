@@ -188,22 +188,34 @@ def modify_file(row, action, content, file_path, new_lines_length):
                 raise ValueError("Row number is out of bounds.")
             
         elif action == 'update':
-            if new_lines_length > len(lines):
-                print(f"Attempting to insert: {row}")
-                if row >= len(lines):
-                    print(f"at end of file: {row}")
-                    content = "\n\r" + content
-                lines.insert(row, content)  
-            elif 0 < row < len(lines): 
-                print(f"Attempting to update line : {row}")
-                lines[row] = content 
-            else:
-                raise ValueError("Row number is out of bounds for modification.")
-            
-            
+                if new_lines_length > len(lines):
+                    print(f"Attempting to insert: {row}")
+                    if row >= len(lines):
+                        print(f"at end of file: {row}")
+                        content = "\n\r" + content
+                        lines.insert(row, content) 
+                    else:
+                        print("enter in mid of line ")
+                        content_above = lines[row - 1]
+                        print(content_above)
+                        end = len(content_above) - len(content) - 1
+                        lines[row - 1] = content_above[0:end] + "\r"
+                        lines.insert(row, content + "\r") 
+                elif 0 < row < len(lines): 
+                    print(f"Attempting to update line : {row}")
+                    lines[row] = content + "\r"
         else:
-            raise ValueError("Unsupported action. Use 'delete', 'insert' or 'update'")
-        
+            raise ValueError("Row number is out of bounds for modification.")
+            
+        """elif action == 'update':
+            if row >= len(lines):
+                print(f"Attempting to insert at end of file: {row + 1}")
+                lines.insert(row + 1, content + "\n\r")
+            elif 0 <= row < len(lines): 
+                print(f"Attempting to update line : {row}")
+                lines[row] = content + "\r"
+            else:
+                raise ValueError("Row number is out of bounds for modification.")"""
         
         with open(file_path, 'w', encoding='utf-8') as file:
             file.writelines(lines)
