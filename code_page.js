@@ -17,7 +17,7 @@ let previousContent = '';
 
 // Functionality Constants
 const DEBOUNCE_DELAY = 500; // ms
-const MIN_WIDTH = 150;
+const MIN_WIDTH = 80;
 const MAX_WIDTH = window.innerWidth * 0.8;
 
 // Event Listeners
@@ -26,10 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
     updateLineNumbers();
 });
 
-codeEditor.addEventListener('keydown', onCodeEditorKeyDown);
-codeEditor.addEventListener('paste', onCodeEditorPaste);
-codeEditor.addEventListener('scroll', onCodeEditorScroll);
-codeEditor.addEventListener('input', onCodeEditorInput);
+codeEditor.addEventListener('paste', onCodeEditorPaste); // handles pasting
+codeEditor.addEventListener('scroll', onCodeEditorScroll); // handles scroling
+codeEditor.addEventListener('input', onCodeEditorInput); // handles input saving
 
 newFileButton.addEventListener('click', onNewFileButtonClick);
 runButton.addEventListener('click', onRunButtonClick);
@@ -38,16 +37,11 @@ fileNameInput.addEventListener('blur', onFileNameInputBlur);
 fileNameInput.addEventListener('keypress', onFileNameInputKeyPress);
 
 resizeHandle.addEventListener('mousedown', onResizeHandleMouseDown);
-document.addEventListener('mousemove', onDocumentMouseMove);
-document.addEventListener('mouseup', onDocumentMouseUp);
-document.addEventListener('keydown', onDocumentKeyDown);
+document.addEventListener('mousemove', onDocumentMouseMove); //adjusts the output container based on the mouse's horizontal movement while resizing
+document.addEventListener('mouseup', onDocumentMouseUp);    
+document.addEventListener('keydown', onDocumentKeyDown); // handles Ctrl+S or Command+S, prevents the default save actioni nstead calls saveFile
 
 // Helper Functions
-function onCodeEditorKeyDown(e) {
-    if (e.key === 'Enter') {
-        requestAnimationFrame(updateLineNumbers);
-    }
-}
 
 function onCodeEditorPaste(e) {
     e.preventDefault();
@@ -134,7 +128,7 @@ function onDocumentMouseUp() {
 function onDocumentKeyDown(event) {
     if ((event.ctrlKey || event.metaKey) && event.key === 's') {
         event.preventDefault();
-        saveFile();
+        debouncedSaveInput
     }
 }
 
