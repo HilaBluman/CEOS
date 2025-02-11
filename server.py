@@ -182,8 +182,8 @@ def modify_file(row, action, content, file_path, new_lines_length):
 
         if action == 'delete':
             print(f"Attempting to delete row: {row} from {len(lines)} ")  
-            if 0 <= row < len(lines):  # Change to < instead of <=
-                del lines[row - 1]
+            if 0 <= row < len(lines) and new_lines_length < len(lines):  # Change to < instead of <=
+                del lines[row]
             else:
                 raise ValueError("Row number is out of bounds.")
             
@@ -193,7 +193,7 @@ def modify_file(row, action, content, file_path, new_lines_length):
                     print(f"Attempting to insert: {row}")
                     if row >= len(lines):
                         print(f"at end of file: {row}")
-                        content = "\n\r" + content
+                        content = content + "\n\r" #+ content
                         lines.insert(row, content) 
                     else:
                         print("enter in mid of line ")
@@ -202,7 +202,7 @@ def modify_file(row, action, content, file_path, new_lines_length):
                         end = len(content_above) - len(content) - 1
                         lines[row - 1] = content_above[0:end] + "\r"
                         lines.insert(row, content + "\r") 
-                elif 0 < row < len(lines): 
+                elif 0 <= row < len(lines): 
                     print(f"Attempting to update line : {row}")
                     lines[row] = content + "\r"
         else:

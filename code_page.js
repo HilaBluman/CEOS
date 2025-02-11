@@ -51,7 +51,7 @@ function onCodeEditorPaste(e) {
     range.deleteContents();
     range.insertNode(document.createTextNode(text));
     updateLineNumbers();
-    debouncedSaveInput();
+    saveInput();
 
 }
 
@@ -59,11 +59,13 @@ function onCodeEditorScroll() {
     lineNumbers.scrollTop = codeEditor.scrollTop;
 }
 
-const debouncedSaveInput = debounce(saveInput, DEBOUNCE_DELAY);
 
 function onCodeEditorInput() {
+    const cursorPosition = getCursorPosition(codeEditor);
+    const lines = codeEditor.textContent.split('\n');
+    old_lines_len = len(lines)
     updateLineNumbers();
-    debouncedSaveInput();
+    saveInput(old_lines_len);
 }
 
 function onNewFileButtonClick() {
@@ -128,20 +130,28 @@ function onDocumentMouseUp() {
 function onDocumentKeyDown(event) {
     if ((event.ctrlKey || event.metaKey) && event.key === 's') {
         event.preventDefault();
-        debouncedSaveInput
+        saveInput();
     }
 }
 
 // Core Functions
-async function saveInput(action = 'update') {
+async function saveInput(old_lines_len) {
     const cursorPosition = getCursorPosition(codeEditor);
     const lines = codeEditor.textContent.split('\n');
     const row = cursorPosition.row;
     const currentLine = lines[row];
     const linesLength = lines.length - 1;
+    const action = "";
+
+    if(old_lines_len < lines.length){
+        action = "delete";}
+    else{
+        action = "update";}
 
     const modification = JSON.stringify({ currentLine, row, action, linesLength });
     const filename = document.getElementById('file-name').textContent;
+
+    console.log("modification: " + modification)
 
     try {
         const encodedModification = encodeURIComponent(modification);
@@ -243,13 +253,4 @@ async function loadContent(filename) {
 async function loadInitialFile() {
     let filename = prompt('Enter the file name to load:', 'main.py');
     if (filename) await loadContent(filename);
-}
-
-// Debounce Function
-function debounce(func, delay) {
-    let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func(...args), delay);
-    };
 }
