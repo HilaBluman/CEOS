@@ -14,6 +14,9 @@ let isResizing = false;
 let startX;
 let startOutputWidth;
 let previousContent = '';
+let timeoutId;
+let highlighted_flag = false;
+let highlightedTxt = {start: -1, end: -1, selectedText: ""}
 
 // Functionality Constants
 const DEBOUNCE_DELAY = 500; // ms
@@ -28,18 +31,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 codeEditor.addEventListener('paste', onCodeEditorPaste); // handles pasting
 codeEditor.addEventListener('scroll', onCodeEditorScroll); // handles scroling
-codeEditor.addEventListener('input', onCodeEditorInput); // handles input saving
+//codeEditor.addEventListener('input', onCodeEditorInput); // handles input saving  
 
 newFileButton.addEventListener('click', onNewFileButtonClick);
 runButton.addEventListener('click', onRunButtonClick);
-fileNameDisplay.addEventListener('dblclick', onFileNameDisplayDblClick);
-fileNameInput.addEventListener('blur', onFileNameInputBlur);
-fileNameInput.addEventListener('keypress', onFileNameInputKeyPress);
 
 resizeHandle.addEventListener('mousedown', onResizeHandleMouseDown);
 document.addEventListener('mousemove', onDocumentMouseMove); //adjusts the output container based on the mouse's horizontal movement while resizing
 document.addEventListener('mouseup', onDocumentMouseUp);    
-document.addEventListener('keydown', onDocumentKeyDown); // handles Ctrl+S or Command+S, prevents the default save actioni nstead calls saveFile
+document.addEventListener('keydown', onDocumentKeySave); // handles Ctrl+S or Command+S, prevents the default save action instead calls saveFile
+document.addEventListener('keyup', onCodeEditorInput); // handles input saving  
+document.addEventListener('selectionchange', Get_highlightedText) // handles input saving  
+
 
 // Helper Functions
 
@@ -51,7 +54,7 @@ function onCodeEditorPaste(e) {
     range.deleteContents();
     range.insertNode(document.createTextNode(text));
     updateLineNumbers();
-    debouncedSaveInput();
+    saveInput();
 
 }
 
@@ -59,11 +62,28 @@ function onCodeEditorScroll() {
     lineNumbers.scrollTop = codeEditor.scrollTop;
 }
 
-const debouncedSaveInput = debounce(saveInput, DEBOUNCE_DELAY);
 
-function onCodeEditorInput() {
-    updateLineNumbers();
-    debouncedSaveInput();
+async function onCodeEditorInput(event) {
+    await updateLineNumbers();
+    const lines = codeEditor.textContent.split('\n');
+    const linesLength = lines.length - 1;
+    if (highlighted_flag){
+        console.log("in highlighted_flag");
+        console.log("event.key: " + event.key)
+        if (event.key === 'Backspace' || event.keyCode === 8) {
+            const firstline = lines[highlightedTxt.start];
+            await DeleteHighhlighted(highlightedTxt.start, highlightedTxt.end, linesLength, firstline);
+        }
+        // add a paste one
+        highlighted_flag = false;
+    }
+    else{               
+        const row = getCursorPosition(codeEditor);
+        const currentLine = lines[row]
+        const action = "update";
+        const modification = JSON.stringify({ currentLine, row, action, linesLength });
+        saveInput(modification);
+    }
 }
 
 function onNewFileButtonClick() {
@@ -82,24 +102,6 @@ function onNewFileButtonClick() {
 
 async function onRunButtonClick() {
     setTimeout(runFile, 100);
-}
-
-function onFileNameDisplayDblClick() {
-    fileNameDisplay.classList.add('hidden');
-    fileNameInput.classList.remove('hidden');
-    fileNameInput.value = fileNameDisplay.textContent;
-    fileNameInput.focus();
-}
-
-function onFileNameInputBlur() {
-    const newFileName = fileNameInput.value.trim() || fileNameDisplay.textContent;
-    loadContent(newFileName);
-}
-
-function onFileNameInputKeyPress(e) {
-    if (e.key === 'Enter') {
-        fileNameInput.blur();
-    }
 }
 
 function onResizeHandleMouseDown(e) {
@@ -125,23 +127,32 @@ function onDocumentMouseUp() {
     document.body.classList.remove('resizing');
 }
 
-function onDocumentKeyDown(event) {
+function onDocumentKeySave(event) {
     if ((event.ctrlKey || event.metaKey) && event.key === 's') {
         event.preventDefault();
-        debouncedSaveInput
+        saveAll();
     }
 }
 
-// Core Functions
-async function saveInput(action = 'update') {
-    const cursorPosition = getCursorPosition(codeEditor);
-    const lines = codeEditor.textContent.split('\n');
-    const row = cursorPosition.row;
-    const currentLine = lines[row];
-    const linesLength = lines.length - 1;
+function DeleteHighhlighted(start, fin, linesLength, firstline ) {  
+        console.log("Delete - start: " + start + " fin: " + fin)
+        const action = 'delete'
+        for(let i = fin; i > start; i--){
+            const modification = JSON.stringify({ currentLine: "in delete", row: i, action, linesLength });
+            saveInput(modification)
+        }
+        const modification = JSON.stringify({ currentLine: firstline, row: start, action: 'update', linesLength });
+        saveInput(modification)
+        codeEditor.focus(); // Focus back on the textarea
+}
 
-    const modification = JSON.stringify({ currentLine, row, action, linesLength });
+
+// Core Functions
+
+async function saveInput(modification) {
     const filename = document.getElementById('file-name').textContent;
+
+    console.log("modification: " + modification)
 
     try {
         const encodedModification = encodeURIComponent(modification);
@@ -164,18 +175,18 @@ async function saveInput(action = 'update') {
 }
 
 function getCursorPosition(element) {
-    const selection = window.getSelection();
-    if (selection.rangeCount === 0) {
-        return { row: 0 };
-    }
-    const range = selection.getRangeAt(0);
-    const preCaretRange = range.cloneRange();
-    preCaretRange.selectNodeContents(element);
-    preCaretRange.setEnd(range.endContainer, range.endOffset);
-    const text = preCaretRange.toString();
-    const row = (text.match(/\n/g) || []).length;
-    return { row };
-}
+     const selection = window.getSelection();
+     if (selection.rangeCount === 0) {
+         return { row: 0 };
+     }
+     const range = selection.getRangeAt(0);
+     const preCaretRange = range.cloneRange();
+     preCaretRange.selectNodeContents(element);
+     preCaretRange.setEnd(range.endContainer, range.endOffset);
+     const text = preCaretRange.toString();
+     const row = (text.match(/\n/g) || []).length;
+     return row ;
+ }
 
 function updateLineNumbers() {
     const lines = codeEditor.textContent.split('\n');
@@ -245,11 +256,24 @@ async function loadInitialFile() {
     if (filename) await loadContent(filename);
 }
 
-// Debounce Function
-function debounce(func, delay) {
-    let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func(...args), delay);
-    };
+
+async function Get_highlightedText(){
+    const selectedText = window.getSelection().toString();
+    clearTimeout(timeoutId); 
+    timeoutId = setTimeout(function() {
+        if(selectedText){
+            highlighted_flag = true;
+            highlightedTxt.start = getCursorPosition(codeEditor) - 1;
+            highlightedTxt.end = highlightedTxt.start + selectedText.split('\n').length - 1;
+            highlightedTxt.selectedText = selectedText;
+        }
+        else{
+            highlighted_flag = false;
+            highlightedTxt.start = -1;
+            highlightedTxt.end = - 1;
+            highlightedTxt.selectedText = "";
+        }  
+        console.log("highhlighted flag: " + highlighted_flag);      
+        codeEditor.focus(); // Focus back on the textarea
+    }, 200); // Delay of 200 milliseconds
 }

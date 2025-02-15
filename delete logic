@@ -1,0 +1,44 @@
+delete logic:
+
+get the start curser positon 
+delete all lines between the first and last line - (first > i => last)
+starting with deleting the last row and going backwards 
+update the start line 
+
+
+start/end - start/end of highlighted text
+start/end line - start/end line of highlighted text
+
+
+delete fix new:
+
+codeEditor.addEventListener('keydown', function(e) {
+    if (e.key === 'delete') {      // need to check
+        row = getCursorPosition(codeEditor)
+        len_highlighted = len_highlighted.length
+        flag = true;
+        for(let i = len_highlighted - 1; i < row && flag; i++){
+            saveInput(i,'delete')
+        }
+        saveInput(i,'update')
+        requestAnimationFrame(updateLineNumbers)
+    }
+});
+
+delete fix original:
+
+codeEditor.addEventListener('keydown', function(e) {
+    if (e.key === 'delete') {      // need to check
+        const previousLines = previousContent.split('\n');
+        const currentLines = codeEditor.textContent.split('\n');
+        previousContent = codeEditor.textContent
+        row = getCursorPosition(codeEditor)
+        flag = true;
+        for(let i = row + 1; i < currentLines.length && flag; i++){
+            saveInput(i,'delete')
+            if(previousLines[row + 1] == currentLines[i]){
+                flag = false;}
+        }
+        requestAnimationFrame(updateLineNumbers)
+    }
+});

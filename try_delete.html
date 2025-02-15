@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Try delete</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .editor-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            max-width: 600px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        #text-input {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-bottom: 20px;
+            resize: vertical;
+        }
+
+        #preview {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            min-height: 100px;
+            font-size: 16px;
+            color: #333;
+        }
+
+        #save-button {
+            display: block;
+            margin: 10px auto;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="editor-container">
+        <h1>Try delete</h1>
+        <textarea id="text-input" placeholder="Start typing here..."></textarea>
+        <button id="save-button">Save Highlighted Text</button>
+        <div id="preview" class="preview"></div>
+    </div>
+
+    <script>
+        // document.getElementById('text-input').addEventListener('input', function() {
+        //     const text = this.value;
+        //     document.getElementById('preview').innerText = text;
+        // });
+        const text_input = document.getElementById('text-input');
+        let timeoutId;
+
+        function getCursorPosition(element) {
+            const cursorPosition = element.selectionStart; // Get the cursor position
+            const text = element.value; // Get the text from the textarea
+
+            const lines = text.slice(0, cursorPosition).split('\n'); // Split text up to cursor position into lines
+            return lines.length - 1; // Return the number of lines (1-based)
+        }
+
+
+        // gets highlighted txt
+        document.addEventListener('selectionchange', function() {
+        const selectedText = window.getSelection().toString();
+        clearTimeout(timeoutId); 
+        timeoutId = setTimeout(function() {
+                //console.log("row cursor: " + getCursorPosition(text_input))
+                const textInput = document.getElementById('text-input');
+                if(selectedText){
+                    const start = getCursorPosition(text_input)
+                    const end = start + selectedText.split('\n').length - 1
+                    console.log("start/row cursor: " + start)
+                    console.log("end highhlighted section: " + end)
+                    document.getElementById('preview').innerText = selectedText + '\n'; 
+                }
+                textInput.focus(); // Focus back on the textarea
+                }, 200); // Delay of 500 milliseconds
+        });
+        
+        document.getElementById('save-button').addEventListener('click', function() {
+            const textInput = document.getElementById('text-input');
+            const selectedText = window.getSelection().toString();
+            if (selectedText) {
+                console.log("selectedText: " + selectedText)
+                document.getElementById('preview').innerText = selectedText + '\n'; 
+                textInput.focus(); // Focus back on the textarea
+            } else {
+                alert('Please select some text to save.');
+            }
+        });
+    </script>
+</body>
+</html>

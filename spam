@@ -1,0 +1,22 @@
+function onFileNameDisplayDblClick() {
+    fileNameDisplay.classList.add('hidden');
+    fileNameInput.classList.remove('hidden');
+    fileNameInput.value = fileNameDisplay.textContent;
+    fileNameInput.focus();
+}
+
+function onFileNameInputBlur() {
+    const newFileName = fileNameInput.value.trim() || fileNameDisplay.textContent;
+    loadContent(newFileName);
+}
+
+function onFileNameInputKeyPress(e) {
+    console.log("e.key:"  + e.key)
+    if (e.key === 'Enter') {
+        fileNameInput.blur();
+    }
+}
+
+fileNameDisplay.addEventListener('dblclick', onFileNameDisplayDblClick);
+fileNameInput.addEventListener('blur', onFileNameInputBlur);
+fileNameInput.addEventListener('keypress', onFileNameInputKeyPress);

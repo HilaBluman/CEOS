@@ -92,10 +92,16 @@ def upload_file(client_socket, headers_data, PATH_TO_FOLDER, content_length):
     client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
 
 
-def receive_headers(client_socket, timeout=25):
+def receive_headers(client_socket):
     # Receiveing only the headers
-    client_socket.settimeout(timeout)
     headers = b""
+    client_socket.settimeout(300) 
+    action = client_socket.recv(4).decode() # can get less than 4
+    client_socket.settimeout(25)
+    if action != "GET " and action != "POST":
+        return "Not valid action", ""
+    print(f"Client wants to: '{action}'")
+
     try:
         while True:
             chunk = client_socket.recv(1)  # gets every time one so not exstra data gets lost.
@@ -106,7 +112,7 @@ def receive_headers(client_socket, timeout=25):
         raise Exception("Timeout while receiving headers")
     finally:
         client_socket.settimeout(None)
-    return headers
+    return action, headers
 
 
 def run_file(client_socket, file, PATH_TO_FOLDER):
@@ -181,9 +187,9 @@ def modify_file(row, action, content, file_path, new_lines_length):
         # print(f"Line lengths: {[len(line) for line in lines]}")
 
         if action == 'delete':
-            print(f"Attempting to delete row: {row} from {len(lines)} ")  
-            if 0 <= row < len(lines):  # Change to < instead of <=
-                del lines[row - 1]
+            print(f"Attempting to delete row: {row} from {len(lines)} ")
+            if 0 <= row < len(lines) and new_lines_length < len(lines):  
+                del lines[row]
             else:
                 raise ValueError("Row number is out of bounds.")
             
@@ -193,7 +199,7 @@ def modify_file(row, action, content, file_path, new_lines_length):
                     print(f"Attempting to insert: {row}")
                     if row >= len(lines):
                         print(f"at end of file: {row}")
-                        content = "\n\r" + content
+                        content = content + "\n\r" #+ content
                         lines.insert(row, content) 
                     else:
                         print("enter in mid of line ")
@@ -202,7 +208,7 @@ def modify_file(row, action, content, file_path, new_lines_length):
                         end = len(content_above) - len(content) - 1
                         lines[row - 1] = content_above[0:end] + "\r"
                         lines.insert(row, content + "\r") 
-                elif 0 < row < len(lines): 
+                elif 0 <= row < len(lines): 
                     print(f"Attempting to update line : {row}")
                     lines[row] = content + "\r"
         else:
@@ -235,10 +241,12 @@ def handle_client(client_socket, client_address, num_thread):
                 #client_socket.settimeout(None)  
                 #print(f"Client {client_address} wants to: '{action}'")
 
-                data = receive_headers(client_socket)
-                action = data.decode()[:4]
+                action, data = receive_headers(client_socket)
+                if action == "Not valid action":
+                    print("received unknown action! action:" + action)
+                    break
                 print(f"Client {client_address} wants to: '{action}'")
-                headers_data = data.decode()[4:]
+                headers_data = data.decode()
                 print("------------------")
                 print("Client sent headers:" + headers_data)
                 print("------------------")

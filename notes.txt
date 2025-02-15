@@ -6,19 +6,22 @@ other client can edit the file
 ? maybe create websockets, on the python side and use ready lib in js. (probbly will not)
 
 bugs:
-⚪️ updating first line (0) odes not work? 
-⚪️ when pasting only pastes the line the curser waas on (maybe use the LCS here? or find other solution)
-⚪️ delete half works, works when deleting in line but not sure about deleting a row..(maybe change so when i prees on delete it will check if the line is emty )
+
 ⚪️ it gets stuck after few inputs!!!
 ⚪️ when it disconnect i get these errors in the console log 1. Failed to load resource: net:ERR_CONTENT_LENGTH_MISMATCH  2. Error saving file: TypeError: Failed to fetch
 saveInput. it happens when Timeout while receiving headers
+⚪️ save is lagy and slow
+
+⚪️ when pasting only pastes the line the curser was on (maybe use the LCS here? or find other solution)
+✔️ functions that doen work: onDocumentDelete. (listener on document insted of code-editor)
+✔️ does not work when deleting multiple lines (changed so when i prees on delete it will check of highlighed if so up dates the first line then deletes the rest)
 ✔️ when adding a new line in the mid of a file the data after deletes. ( added "\r")
 ✔️ when updating a line the rest of the data after said line.
 ✔️ new line without content
 
 
 do:
-✔️ debounce - When the debounced function is called, it first clears any existing timeout. This means that if the function is called multiple times in quick successionit will only be executed once, after the last call.
+⚪️ debounce - When the debounced function is called, it first clears any existing timeout. This means that if the function is called multiple times in quick successionit will only be executed once, after the last call.
 ✔️ pasting code in one line.
 ✔️ change to use actions insted of sending all the countent like delete (number row),change (this row), add a row and more.
 
@@ -31,3 +34,4 @@ LCS - Longest Common Subsequence:
 2. https://interviewing.io/questions/longest-common-subsequence
 3. most efficient solved for finding the LCS is with a matrix because it breaks down the problam to smaller problams and it
 allowes for backtrucks of the LCS.
+
