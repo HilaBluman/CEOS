@@ -6,7 +6,10 @@ import subprocess
 import threading
 import urllib.parse
 from difflib import SequenceMatcher
+from class_users import UserDatabase
 
+# Create an instance at the start of your server
+user_db = UserDatabase("/Users/hila/CEOs/users.db")
 
 def file_exist(file_path):
     if not os.path.exists(file_path):
@@ -65,14 +68,17 @@ def ready_to_send(status, data_file, content_type="text/html"):
 
 
 def find_file_type(request):
+    print(request)
     if request == "/":  # for windows change to "\\" for mac "/"
-        request = r"/html/editor_page.html"  # will change to /home.html when there will be home screen  /code_page
+        request = r"/home_page.html"  # will change to /home.html when there will be home screen  /code_page
+        file_type = "text/html"
+    elif r".html" in request:
         file_type = "text/html"
     elif r"/js" in request:
         file_type = "text/js"
     else:
         index_dot = request.find(".") + 1
-        file_type = "text/" + request[index_dot:index_dot + 3]
+        file_type = "text/" + request[index_dot:index_dot + 3] 
     print(file_type)
     return request, file_type
 
@@ -371,6 +377,7 @@ def handle_client(client_socket, client_address, num_thread):
                         client_socket.send(response.encode() + photo)
 
                 elif "." in request or "/" == request:  # is the last option/elif
+                    print("in last elif")
                     request, file_type = find_file_type(request)
 
                     if file_forbidden(PATH_TO_FOLDER + request, FORBIDDEN):
@@ -399,8 +406,23 @@ def handle_client(client_socket, client_address, num_thread):
                         raise ValueError("Content-Length header not found")
 
                     content_length = int(match.group(1))
+                    if "/signup" in headers_data:
+                        body = client_socket.recv(content_length).decode()
+                        data = json.loads(body)
+                        username = data.get('username')
+                        password = data.get('password')
+                        response = user_db.signup(username, password)
+                        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
 
-                    if "/disconnection" in headers_data:
+                    elif "/login" in headers_data:
+                        body = client_socket.recv(content_length).decode()
+                        data = json.loads(body)
+                        username = data.get('username')
+                        password = data.get('password')
+                        response = user_db.login(username, password)
+                        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+
+                    elif "/disconnection" in headers_data:
                         body = ""
                         if content_length > 0:
                             body = client_socket.recv(content_length).decode()
@@ -415,7 +437,7 @@ def handle_client(client_socket, client_address, num_thread):
                             print('Failed to decode JSON')"""
                         return  # Exit the function
 
-                    if "/upload" in headers_data: 
+                    elif "/upload" in headers_data: 
                         print("------------------")
                         print("in uploads")
                         upload_file(client_socket, headers_data, PATH_TO_FOLDER, content_length)
