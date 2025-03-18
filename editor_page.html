@@ -9,25 +9,19 @@
 
 </head>
 <body> 
-  <div class="top-banner">
-    <div class="dropdown">
-      <div class="menu-icon" onclick="toggleMenu()">☰</div>
-      <div class="dropdown-content" id="menuDropdown">
-        <a href="https://ceos.com/home">🏠 Home</a>
-        <a href="https://ceos.com/settings">⚙️ Settings</a>
-      </div>
-    </div>
-    <div class="logo">
-      <div class="logo-icon">&lt;&gt;</div>
-      CEOs
-    </div>
-  </div>
+  <header class="top-bar">
+        <div class="menu-icon">☰</div>
+        <div class="logo">
+            <div class="logo-icon"> &lt;/&gt; </div>
+            <span class="logo-text">CEOs</span>
+        </div>
+    </header>
   
   <div class="platform">
     <div class="sidebar">
       <div class="user-info">
-        <div class="avatar">JS</div>
-        <div>John Smith</div>
+        <div class="avatar" id="username-avater">.</div>
+        <div id="username-display"></div> 
       </div>
       
       <h3>Files</h3>
