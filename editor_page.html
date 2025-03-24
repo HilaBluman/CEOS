@@ -20,13 +20,13 @@
   <div class="platform">
     <div class="sidebar">
       <div class="user-info">
-        <div class="avatar" id="username-avater">.</div>
+        <div class="avatar" id="username-avater"></div>
         <div id="username-display"></div> 
       </div>
       
-      <h3>Files</h3>
-      <div id="file-name"></div>  
+      <h3>Files</h3> 
       <ul class="file-tree">
+        <li id="file-name"> 📄 </li>
         <li>📄 index.html</li>
         <li>📄 main.js</li>
         <li>📄 styles.css</li>
@@ -45,21 +45,9 @@
           <button onclick="runCode()">▶</button>
           <button onclick="newFile()">📄</button>
           <button>👥</button>
-          <button onclick="toggleChat()">💬</button>
           <button onclick="toggleOutput()">📟</button>
         </div>
       
-        <div class="chat-section">
-          <h3>Team Chat</h3>
-          <div class="chat-messages">
-            <div class="message">
-              <strong>John:</strong> Just pushed some updates to the main branch
-            </div>
-            <div class="message">
-              <strong>Sarah:</strong> Looking good! Let's review the changes
-            </div>
-          </div>
-        </div> 
         <div class="output-section">
           <div class="output">
             <div class="output-title">Output Console</div>

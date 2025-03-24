@@ -7,7 +7,7 @@ async function initializeEditor() {
         require(['vs/editor/editor.main'], function() {
             codeEditor = monaco.editor.create(document.getElementById('editor-container'), {
                 value: "",
-                language: 'javascript',
+                language: 'python',
                 theme: 'vs-dark',
                 automaticLayout: true
             });
@@ -265,6 +265,13 @@ function isTextHighlighted() {
     isHighlighted = selection.startLineNumber !== selection.endLineNumber; // Returns true if text is highlighted
 }
 
+function changeEditorLanguage(newLanguage) {
+    const model = codeEditor.getModel();
+    if (model) {
+        monaco.editor.setModelLanguage(model, newLanguage);
+    }
+}
+
 async function DeleteHighlighted(start, fin, linesLength, firstline ) {  
     console.log("Delete - start: " + start + " fin: " + fin)
     const action = 'delete'
@@ -300,28 +307,6 @@ function onKeyZ(event){
         console.log("cmd z")
     }
 }
-/*async function onCodeEditorInput(event) {
-    if (isPasting) return;
-
-    const lines = codeEditor.getValue().split('\n');
-    const linesLength = lines.length - 1;
-    if (isHighlighted){
-        console.log("in isHighlighted");
-        if (event.key === 'Backspace' || event.keyCode === 8) {
-            const firstline = lines[highlightedTxt.start];
-            await DeleteHighhlighted(highlightedTxt.start, highlightedTxt.end, linesLength, firstline);
-        }
-        isHighlighted = false;
-    }
-    else{               
-        const position = codeEditor.getPosition();
-        const row = position.lineNumber - 1;
-        const content = lines[row]
-        const action = "update";
-        const modification = JSON.stringify({ content, row, action, linesLength });
-        saveInput(modification);
-    }
-}*/
 
 function onNewFileButtonClick() {
     let newFileName = prompt('Enter file name:', 'untitled.py');
@@ -367,18 +352,6 @@ async function saveAll() {
     saveInput(modification)
     isPasting = false;
 }
-
-/*async function DeleteHighhlighted(start, fin, linesLength, firstline ) {  
-    console.log("Delete - start: " + start + " fin: " + fin)
-    const action = 'delete'
-    for(let i = fin; i > start; i--){
-        const modification = JSON.stringify({ content: "in delete", row: i, action, linesLength });
-       await saveInput(modification)
-    }
-    const modification = JSON.stringify({ content: firstline, row: start , action: 'update', linesLength });
-    saveInput(modification)
-    codeEditor.focus();
-}*/
 
 async function saveInput(modification) {
     const filename = document.getElementById('file-name').textContent;
@@ -468,31 +441,10 @@ async function loadContent(filename) {
 
 async function loadInitialFile() {
     await initializeEditor(); // Ensure the editor is initialized before loading content
-    let filename = "hila.js"; // Prompt for the file name if needed
+    let filename = "main.py"; // Prompt for the file name if needed
     if (filename) await loadContent(filename);
 }
 
-/*async function Get_highlightedText(){
-    const selection = codeEditor.getSelection();
-    const selectedText = codeEditor.getModel().getValueInRange(selection);
-    clearTimeout(timeoutId); 
-    timeoutId = setTimeout(function() {
-        if(selectedText){
-            isHighlighted = true;
-            highlightedTxt.start = selection.startLineNumber - 1;
-            highlightedTxt.end = selection.endLineNumber - 1;
-            highlightedTxt.selectedText = selectedText;
-        }
-        else{
-            isHighlighted = false;
-            highlightedTxt.start = -1;
-            highlightedTxt.end = - 1;
-            highlightedTxt.selectedText = "";
-        }  
-        console.log("highhlighted flag: " + isHighlighted);      
-        codeEditor.focus();
-    }, 200);
-}*/
 
 function newFile() {
     const fileName = prompt("Enter new file name:");
@@ -505,10 +457,6 @@ function newFile() {
     }
 }
 
-function toggleChat() {
-    const chatSection = document.querySelector('.chat-section');
-    chatSection.classList.toggle('visible');
-}
 
 function toggleOutput() {
     const outputSection = document.querySelector('.output-section');
