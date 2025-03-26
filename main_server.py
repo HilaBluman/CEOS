@@ -6,10 +6,13 @@ import subprocess
 import threading
 import urllib.parse
 from difflib import SequenceMatcher
-from class_users import UserDatabase
+from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase
 from polling_server import start_polling_server
 # Create an instance at the start of your server
-user_db = UserDatabase("/Users/hila/CEOs/users.db")
+DB_PATH = "/Users/hila/CEOs/users.db"
+user_db = UserDatabase(DB_PATH)
+file_permissions_db = FilePermissionsDatabase(DB_PATH)
+file_db = FileInfoDatabase(DB_PATH)
 
 def file_exist(file_path):
     if not os.path.exists(file_path):
@@ -173,13 +176,20 @@ def run_file(client_socket, file, PATH_TO_FOLDER):
     response = ready_to_send("200 OK", response_data, "application/json")
     client_socket.send(response.encode() + response_data.encode('utf-8'))
 
+def get_header(client_socket, headers_data, header=r'filename:\s*(\S+)'):
+    header_match = re.search(header, headers_data)
+    if not header_match:
+        client_socket.send(ready_to_send("406 Not Acceptable", f" header not found file", "text/plain").encode())
+        return "header not found file"
+    return header_match.group(1)
 
 def get_filename(client_socket, headers_data):
     filename_match = re.search(r'filename:\s*(\S+)', headers_data)
     if not filename_match:
         client_socket.send(ready_to_send("406 Not Acceptable", f" no filename", "text/plain").encode())
-        return "no file"
+        return "no filename"
     return filename_match.group(1)
+
 
 def get_countent_len(client_socket, headers_data):
     match = re.search(r'file-length:\s*(\S+)', headers_data)
@@ -299,25 +309,36 @@ def handle_client(client_socket, client_address, num_thread):
                     print(msg)
                     client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
 
-                elif "/check-updates" in headers_data:
-                    print("Checks For Updates")
-                    filename = get_filename(client_socket, headers_data)
+                elif "/get-user-files" in headers_data:
+                    try:
+                        print("Getting user files")
+                        user_id = get_header(client_socket, headers_data, r'userId:\s*(\d+)')
+                        
+                        if user_id is None:
+                            return  # Handle the case where user_id is not found
 
-                    # Get the content length from the headers
-                    content_len = get_countent_len(client_socket, headers_data)
+                        user_id = int(user_id)  # Convert user_id to integer if necessary
 
-                    # Get the actual file size on the server
-                    file_path = f"{PATH_TO_FOLDER}/uploads/{filename}"
-                    response_data = {'hasUpdates': False}  # Default to no updates
+                        # Get list of files that user has access to
+                        user_files = file_permissions_db.get_user_access_files(user_id)
+                        
+                        # Separate file IDs and filenames into two lists
+                        file_ids = [file['fileID'] for file in user_files]
+                        file_names = [file['filename'] for file in user_files]
 
-                    if os.path.exists(file_path):
-                        actual_file_len = os.path.getsize(file_path)
-                        if int(content_len) != actual_file_len:
-                            response_data['hasUpdates'] = True  # Update available
-
-                    # Send JSON response
-                    response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
-                    client_socket.send(response.encode() + json.dumps(response_data).encode('utf-8'))
+                        # Prepare the response data with separate arrays
+                        response_data = json.dumps({
+                            'filesId': file_ids,
+                            'filenames': file_names
+                        })
+                        
+                        response = ready_to_send("200 OK", response_data, "application/json")
+                        client_socket.send(response.encode())
+                    except Exception as e:
+                        print(f"Error getting user files: {str(e)}")
+                        error_response = json.dumps({'error': str(e)})
+                        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+                        client_socket.send(response.encode())
 
                 elif "/run" in headers_data:
                     print("------------------")
@@ -331,21 +352,29 @@ def handle_client(client_socket, client_address, num_thread):
                 elif "/load" in headers_data:
                     try:
                         print("in load")
-                        filename = get_filename(client_socket, headers_data)
-                        file_path = f"{PATH_TO_FOLDER}/uploads/{filename}"
-
-                        if not os.path.exists(file_path):
-                            response_data = json.dumps({'fullContent': ''})
+                        fileId = get_header(client_socket, headers_data, r'fileId:\s*(\S+)')
+                        file_status_and_name = file_db.get_filename_by_id(fileId)
+                        filename = file_status_and_name['filename']
+                        status = file_status_and_name['status']
+                        if status == 404:
+                            print(filename)
+                            response = ready_to_send("404 Not Found", filename, "application/json")
+                            client_socket.send(response.encode())
                         else:
-                            with open(file_path, 'r') as file:
-                                content = file.read()
-                                response_data = json.dumps({
-                                    'fullContent': content
-                                })
+                            file_path = f"{PATH_TO_FOLDER}/uploads/{filename}"
+                            print("fileID: " + fileId + "name: " + filename)
+                            if not os.path.exists(file_path):
+                                response_data = json.dumps({'fullContent': ''})
+                            else:
+                                with open(file_path, 'r') as file:
+                                    content = file.read()
+                                    response_data = json.dumps({
+                                        'fullContent': content
+                                    })
 
-                        print("loaded successfully")
-                        response = ready_to_send("200 OK", response_data, "application/json")
-                        client_socket.send(response.encode() + response_data.encode('utf-8'))
+                            print("loaded successfully")
+                            response = ready_to_send("200 OK", response_data, "application/json")
+                            client_socket.send(response.encode() + response_data.encode('utf-8'))
 
                     except Exception as e:
                         print(f"Error in load handler: {str(e)}")

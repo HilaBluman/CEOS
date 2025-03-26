@@ -72,7 +72,7 @@ let isLoaded = false;
 let highlightedTxt = {start: -1, end: -1, selectedText: ""}
 
 let user = {       // temporary           
-    id: 'user123', 
+    id: 0, 
     name: 'John Doe'
 };
 
@@ -258,7 +258,9 @@ function get_username(){
 function get_password(){
     return sessionStorage.getItem('password');}
 function get_userID(){
-    return sessionStorage.getItem('userId');}
+    user_ID = sessionStorage.getItem('userId');
+    console.log("userID: " + user_ID)
+    return user_ID}
 
 function isTextHighlighted() {
     const selection = codeEditor.getSelection();
@@ -379,51 +381,13 @@ async function saveInput(modification) {
     }
 }
 
-async function runFile() {
-    const filename = document.getElementById('file-name').textContent;
-    const outputArea = document.querySelector('.output');
-
-    if (!filename.toLowerCase().endsWith('.py')) {
-        outputArea.textContent = 'Error: Only Python files (.py) can be executed';
-        return;
-    }
-
-    try {
-        const response = await fetch(`http://127.0.0.1:8000/run`, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'filename': filename,
-                'Connection': 'keep-alive' }
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(errorText || `HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        outputArea.textContent = result.output;
-        
-    } catch (error) {
-        outputArea.textContent = `Error: ${error.message}`;
-    }
-}
-
-async function loadContent(filename) {
-    if (!filename.includes('.')) filename += '.py';
-
-    // Check if the 'file-name' element exists
-    const fileNameElement = document.getElementById('file-name');
-    if (fileNameElement) {
-        fileNameElement.textContent = filename;
-    } else {
-        console.error("Element with id 'file-name' not found.");
-    }
+async function loadContent(fileId) {
 
     try {
         const response = await fetch(`/load`, {
             method: 'GET',
             headers: { 
-                'filename': filename,
+                'fileId': fileId,
                 'Connection': 'keep-alive'
             }
         });
@@ -439,11 +403,103 @@ async function loadContent(filename) {
     }
 }
 
+function closeFilePopup() {
+    document.getElementById('file-popup').style.display = 'none'; // Hide the popup
+}
+
+let selectedFileId = null;
+let selectedFileName = null;
+
+function selectFile(fileId, filename) {
+    selectedFileId = fileId; // Store the selected file ID
+    selectedFileName = filename;
+}
+
+async function loadSelectedFile() {
+    if (selectedFileId) {
+        const fileNameElement = document.getElementById('file-name');
+        if (fileNameElement) {
+            fileNameElement.textContent = "📄 " + selectedFileName;}
+        await loadContent(selectedFileId); // Load the content of the selected file
+        closeFilePopup(); // Close the popup after loading
+    } else {
+        alert('Please select a file to load.');
+    }
+}
+
+
+async function GetUserFiles(userId) {
+    try {
+        console.log('Fetching files for user ID:', userId); // Debugging line
+        const response = await fetch('/get-user-files', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'userId': userId
+            }
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.text(); // Log the response body for debugging
+            throw new Error(`HTTP error! status: ${response.status}, body: ${errorBody}`);
+        }
+
+        const data = await response.json();
+        return {
+            fileIds: data.filesId,
+            filenames: data.filenames
+        }; // Return both fileIds and filenames
+    } catch (error) {
+        console.error('Error fetching user files:', error);
+        return [];
+    }
+}
+
 async function loadInitialFile() {
     await initializeEditor(); // Ensure the editor is initialized before loading content
-    let filename = "main.py"; // Prompt for the file name if needed
-    if (filename) await loadContent(filename);
+    user.name = await get_username(); // Ensure this is awaited if it's a promise
+    user.id = await get_userID(); // Ensure this is awaited if it's a promise
+
+    const filesInfo = await GetUserFiles(user.id); // Fetch user files
+    console.log('Fetched files:', filesInfo); // Debugging line
+
+    const fileList = document.getElementById('file-list'); // Get the file list element
+    
+    // Clear existing file list
+    fileList.innerHTML = '';
+    
+    // Check if fileIds and filenames are arrays before proceeding
+    if (Array.isArray(filesInfo.fileIds) && Array.isArray(filesInfo.filenames)) {
+        // Populate the file list
+        filesInfo.filenames.forEach((filename, index) => {
+            const listItem = document.createElement('li');
+            listItem.textContent = filename; // Use filename from the filenames array
+            listItem.setAttribute('data-file-id', filesInfo.fileIds[index]); // Use corresponding fileId
+
+            // Add click event to select the file
+            listItem.onclick = () => {
+                // Remove 'selected' class from all items
+                document.querySelectorAll('#file-list li').forEach(item => item.classList.remove('selected'));
+                // Add 'selected' class to the clicked item
+                listItem.classList.add('selected');
+                // Call the selectFile function with the selected fileId and filename
+                selectFile(filesInfo.fileIds[index], filesInfo.filenames[index]);
+            };
+
+            fileList.appendChild(listItem); // Append the list item to the file list
+        });
+    } else {
+        console.error('No files found or invalid response:', filesInfo);
+    }
+
+    // Show the popup
+    document.getElementById('file-popup').style.display = 'block';
 }
+
+
+
+
+
 
 
 function newFile() {
@@ -477,5 +533,34 @@ window.onclick = function(event) {
       }
     }
   };
+}
+
+async function runFile() {
+    const filename = document.getElementById('file-name').textContent;
+    const outputArea = document.querySelector('.output');
+
+    if (!filename.toLowerCase().endsWith('.py')) {
+        outputArea.textContent = 'Error: Only Python files (.py) can be executed';
+        return;
+    }
+
+    try {
+        const response = await fetch(`http://127.0.0.1:8000/run`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'filename': filename,
+                'Connection': 'keep-alive' }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText || `HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        outputArea.textContent = result.output;
+        
+    } catch (error) {
+        outputArea.textContent = `Error: ${error.message}`;
+    }
 }
 // end

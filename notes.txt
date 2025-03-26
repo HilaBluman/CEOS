@@ -1,13 +1,12 @@
 create:
-when not in the tab of the page disconnect or wait till the user is back then get updates. Page hide does not do that!!
 fix file name pos
 what is async??? (read about it)
 other client can see the output of the other client
 other client can edit the file
 
-how can we know how can edit the file?
-need to view all the files the user can edit in files
+the list of the files the user can acces on the side
 when pressing on the file names need to switch to the file.
+
 
 points for later:
 * when creating a new file:

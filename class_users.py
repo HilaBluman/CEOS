@@ -132,7 +132,25 @@ class FileInfoDatabase:
             return dict(file)  # Return file details as a dictionary
         else:
             return None
+
+    def get_filename_by_id(self, fileID):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
         
+        try:
+            cursor.execute('SELECT filename FROM fileInfo WHERE fileID = ?', (fileID,))
+            result = cursor.fetchone()
+            
+            if result:
+                return {'status': 200, 'filename': result['filename']}
+            else:
+                return {'status': 404, 'filename': 'File not found'}
+                
+        except Exception as e:
+            return {'status': 500, 'message': str(e)}
+        finally:
+            conn.close()
+
 class FilePermissionsDatabase:
     def __init__(self, db_path):
         self.db_path = db_path
@@ -189,14 +207,14 @@ class FilePermissionsDatabase:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT f.fileID, f.name
+            SELECT fp.fileID, fileInfo.filename
             FROM filePermissions fp
-            JOIN fileInfo f ON fp.fileID = f.fileID
+            JOIN fileInfo ON fp.fileID = fileInfo.fileID
             WHERE fp.userID = ?
         ''', (userID,))
         
         files = cursor.fetchall()
-        return [dict(file) for file in files]  # Return list of files as dictionaries
+        return [{'fileID': file[0], 'filename': file[1]} for file in files]  # Return list of files as dictionaries
 
     def has_access(self, fileID, userID):
         conn = self.get_db_connection()
