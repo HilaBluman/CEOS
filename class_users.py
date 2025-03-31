@@ -232,3 +232,79 @@ class FilePermissionsDatabase:
             return True  # User has access to the file
         else:
             return False  # User does not have access to the file
+        
+class ChangeLogDatabase:
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self.create_change_log_table()
+
+    def create_change_log_table(self):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        # Create changeLog table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS changeLog (
+                fileID INTEGER,
+                modification TEXT NOT NULL,
+                modBy INTEGER,
+                Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ModID INTEGER PRIMARY KEY AUTOINCREMENT,
+                FOREIGN KEY (modBy) REFERENCES users(userID)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+
+    def get_db_connection(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def get_changes(self, fileID, lastModID):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT * FROM changeLog 
+            WHERE fileID = ? AND ModID > ?
+        ''', (fileID, lastModID))
+        
+        changes = cursor.fetchall()
+        return [dict(change) for change in changes]  # Return changes as a list of dictionaries
+    def get_changes_by_fileID(self, fileID):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT * FROM changeLog 
+            WHERE fileID = ?
+        ''', (fileID,))
+        
+        changes = cursor.fetchall()
+        return [dict(change) for change in changes]  # Return changes as a list of dictionaries
+    
+    def add_modification(self, fileID, modification, modBy):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                INSERT INTO changeLog (fileID, modification, modBy) 
+                VALUES (?, ?, ?)
+            ''', (fileID, modification, modBy))
+            conn.commit()
+            return {'status': 201, 'message': 'Modification added successfully.'}
+        except Exception as e:
+            return {'status': 500, 'message': str(e)}
+        finally:
+            conn.close()
+
+    
+def main():
+    DB_PATH = "/Users/hila/CEOs/users.db"
+    print("fin")
+
+if __name__ == "__main__":
+    main()
