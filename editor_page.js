@@ -1,5 +1,7 @@
 let codeEditor;
 let isEditorReady = false; // Global flag to track editor readiness
+const host = '192.168.1.110'
+const original_url = 'http://'+ host +':8000'
 
 require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' }});
 async function initializeEditor() {
@@ -292,7 +294,7 @@ function pageHide(event){
         console.log("Page is being persisted in cache.");
     } else {console.log("Page is being discarded.");}
 
-    fetch('https://127.0.0.1:8000/disconnection', {
+    fetch('/disconnection', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -356,12 +358,13 @@ async function saveAll() {
 }
 
 async function saveInput(modification) {
-    const filename = document.getElementById('file-name').textContent;
+    const filename = document.getElementById('file-name').textContent.substring(2);
+    console.log("filename: " + filename)
     //console.log("modification: " + modification);
 
     try {
         const encodedModification = encodeURIComponent(modification);
-        const url = `http://127.0.0.1:8000/save?modification=${encodedModification}`;
+        const url = original_url + `/save?modification=${encodedModification}`;
         
         const response = await fetch(url, {
             method: 'GET',
@@ -545,7 +548,7 @@ async function runFile() {
     }
 
     try {
-        const response = await fetch(`http://127.0.0.1:8000/run`, {
+        const response = await fetch('/run', {
             method: 'GET',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'filename': filename,
                 'Connection': 'keep-alive' }
