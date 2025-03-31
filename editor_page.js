@@ -73,10 +73,12 @@ let isHighlighted = false;
 let isLoaded = false;
 let highlightedTxt = {start: -1, end: -1, selectedText: ""}
 
-let user = {       // temporary           
+let fileID = 0;     // changes after pciking a file
+let user = {       // changes on login           
     id: 0, 
     name: 'John Doe'
 };
+
 
 // Functionality Constants
 const DEBOUNCE_DELAY = 500; // ms
@@ -255,14 +257,15 @@ document.getElementById('username-display').textContent = get_username();
 document.getElementById('username-avater').textContent = get_username().charAt(0).toUpperCase();
 
 function get_username(){
-    console.log(sessionStorage.getItem('username'));
-    return sessionStorage.getItem('username');}
+    user.name = sessionStorage.getItem('username')
+    console.log("username: " + user.name);
+    return user.name;}
 function get_password(){
     return sessionStorage.getItem('password');}
 function get_userID(){
-    user_ID = sessionStorage.getItem('userId');
-    console.log("userID: " + user_ID)
-    return user_ID}
+    user.id = sessionStorage.getItem('userId');
+    console.log("userID: " + user.id)
+    return user.id}
 
 function isTextHighlighted() {
     const selection = codeEditor.getSelection();
@@ -358,17 +361,18 @@ async function saveAll() {
 }
 
 async function saveInput(modification) {
-    const filename = document.getElementById('file-name').textContent.substring(2);
-    console.log("filename: " + filename)
+    //const filename = document.getElementById('file-name').textContent.substring(2);
+    console.log("fileID: " + fileID)
     //console.log("modification: " + modification);
 
     try {
         const encodedModification = encodeURIComponent(modification);
-        const url = original_url + `/save?modification=${encodedModification}`;
-        
+        const url = "/save?modification=" + encodedModification;
+        console.log("before fetch ")
         const response = await fetch(url, {
             method: 'GET',
-            headers: { 'filename': filename,
+            headers: { 'fileID': fileID,
+                "userID": user.id,
                 'Connection': 'keep-alive'}
         });
 
@@ -424,6 +428,7 @@ async function loadSelectedFile() {
         if (fileNameElement) {
             fileNameElement.textContent = "📄 " + selectedFileName;}
         await loadContent(selectedFileId); // Load the content of the selected file
+        fileID = selectedFileId
         closeFilePopup(); // Close the popup after loading
     } else {
         alert('Please select a file to load.');
@@ -498,10 +503,6 @@ async function loadInitialFile() {
     // Show the popup
     document.getElementById('file-popup').style.display = 'block';
 }
-
-
-
-
 
 
 

@@ -6,13 +6,13 @@ import subprocess
 import threading
 import urllib.parse
 from difflib import SequenceMatcher
-from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase
-from polling_server import start_polling_server
+from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase
 # Create an instance at the start of your server
 DB_PATH = "/Users/hila/CEOs/users.db"
 user_db = UserDatabase(DB_PATH)
 file_permissions_db = FilePermissionsDatabase(DB_PATH)
 file_db = FileInfoDatabase(DB_PATH)
+change_log_db = ChangeLogDatabase(DB_PATH)
 
 def file_exist(file_path):
     if not os.path.exists(file_path):
@@ -292,10 +292,22 @@ def handle_client(client_socket, client_address, num_thread):
                     if not match1:
                         print("modification header not found")
                         raise ValueError("modification header not found")
-
-                    filename = get_filename(client_socket, headers_data)
-                    file_path = PATH_TO_FOLDER + "/uploads/" + filename
-                    modification_data = urllib.parse.unquote(match1.group(1))
+                    
+                    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
+                    file_name = file_db.get_filename_by_id(file_id)['filename']
+                    user_id = get_header(client_socket, headers_data, r'userId:\s*(\d+)')
+                    
+                    # fix this does nto work
+                    """if file_name and user_id:
+                        try:
+                            user_id = user_id  # Convert user_id to an integer
+                            modification_message = f"File '{file_name}' has been saved."
+                            change_log_db.add_modification(file_id, modification_message, user_id)  # Log the change
+                        except Exception as e:
+                            print(f"Error logging change: {str(e)}")"""
+                    
+                    file_path = PATH_TO_FOLDER + "/uploads/" + file_name
+                    modification_data = urllib.parse.unquote(match1.group(1)) # is this needed?
                     modification = json.loads(modification_data)
                     content = modification['content']
                     row = modification['row']
@@ -362,7 +374,7 @@ def handle_client(client_socket, client_address, num_thread):
                             client_socket.send(response.encode())
                         else:
                             file_path = f"{PATH_TO_FOLDER}/uploads/{filename}"
-                            print("fileID: " + fileId + "name: " + filename)
+                            print("fileID: " + fileId + " name: " + filename)
                             if not os.path.exists(file_path):
                                 response_data = json.dumps({'fullContent': ''})
                             else:
@@ -437,6 +449,7 @@ def handle_client(client_socket, client_address, num_thread):
                         client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
 
                     elif "/login" in headers_data:
+                        print("headers_data: " + headers_data)
                         body = client_socket.recv(content_length).decode()
                         data = json.loads(body)
                         username = data.get('username')
@@ -490,12 +503,12 @@ def handle_client(client_socket, client_address, num_thread):
         print(f"Disconnected client {client_address}")
         print("_________________________")
 
-def start_main_server(port=8000, host='127.0.0.1'):
+def start_main_server(host='127.0.0.1', port=8000):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
     server_socket.listen(100)  # Allow up to 5 queued connections
     print('Main server is up and running')
-    print("Link: http://127.0.0.1:8000")
+    print("Link: http://"+ host + ":8000")
     print()
     num_thread = 0
     print("Waiting for connections...")
@@ -512,4 +525,5 @@ def start_main_server(port=8000, host='127.0.0.1'):
 
         except Exception as e:
             print(f"Error accepting connection: {str(e)}")
+
 
