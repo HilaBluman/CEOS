@@ -295,26 +295,21 @@ def handle_client(client_socket, client_address, num_thread):
                     
                     file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
                     file_name = file_db.get_filename_by_id(file_id)['filename']
-                    user_id = get_header(client_socket, headers_data, r'userId:\s*(\d+)')
-                    
-                    # fix this does nto work
-                    """if file_name and user_id:
-                        try:
-                            user_id = user_id  # Convert user_id to an integer
-                            modification_message = f"File '{file_name}' has been saved."
-                            change_log_db.add_modification(file_id, modification_message, user_id)  # Log the change
-                        except Exception as e:
-                            print(f"Error logging change: {str(e)}")"""
+                    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
                     
                     file_path = PATH_TO_FOLDER + "/uploads/" + file_name
                     modification_data = urllib.parse.unquote(match1.group(1)) # is this needed?
                     modification = json.loads(modification_data)
-                    content = modification['content']
-                    row = modification['row']
-                    action = modification['action']
+
+                    if file_name and user_id:
+                        try:
+                            change_log_db.add_modification(file_id, modification, user_id)  # Log the change
+                        except Exception as e:
+                            print(f"Error logging change: {str(e)}")
+                            
                     try:
-                        print(f"trying: {row}, {action}, {content}, {file_path} ")
-                        modify_file(row, action, content, file_path, modification['linesLength'])
+                        print(f"trying: {modification['row']}, {modification['action']}, {modification['content']}, {file_path} ")
+                        modify_file(modification['row'], modification['action'], modification['content'], file_path, modification['linesLength'])
                         msg = "File modified successfully."
                     except Exception as e:
                         msg = f"Error modifying file: {str(e)}"

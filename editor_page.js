@@ -74,10 +74,8 @@ let isLoaded = false;
 let highlightedTxt = {start: -1, end: -1, selectedText: ""}
 
 let fileID = 0;     // changes after pciking a file
-let user = {       // changes on login           
-    id: 0, 
-    name: 'John Doe'
-};
+let userID = 0;
+let username = "";
 
 
 // Functionality Constants
@@ -257,15 +255,15 @@ document.getElementById('username-display').textContent = get_username();
 document.getElementById('username-avater').textContent = get_username().charAt(0).toUpperCase();
 
 function get_username(){
-    user.name = sessionStorage.getItem('username')
-    console.log("username: " + user.name);
-    return user.name;}
+    username = sessionStorage.getItem('username')
+    console.log("username: " + username);
+    return username;}
 function get_password(){
     return sessionStorage.getItem('password');}
 function get_userID(){
-    user.id = sessionStorage.getItem('userId');
-    console.log("userID: " + user.id)
-    return user.id}
+    userID = sessionStorage.getItem('userId');
+    console.log("userID: " + userID)
+    return userID}
 
 function isTextHighlighted() {
     const selection = codeEditor.getSelection();
@@ -303,7 +301,7 @@ function pageHide(event){
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            userId: userId,
+            userId: userID,
             timestamp: new Date().toISOString()
         })
     });
@@ -368,11 +366,11 @@ async function saveInput(modification) {
     try {
         const encodedModification = encodeURIComponent(modification);
         const url = "/save?modification=" + encodedModification;
-        console.log("before fetch ")
+        console.log("userID: " + userID)
         const response = await fetch(url, {
             method: 'GET',
             headers: { 'fileID': fileID,
-                "userID": user.id,
+                "userID": userID,
                 'Connection': 'keep-alive'}
         });
 
@@ -465,10 +463,10 @@ async function GetUserFiles(userId) {
 
 async function loadInitialFile() {
     await initializeEditor(); // Ensure the editor is initialized before loading content
-    user.name = await get_username(); // Ensure this is awaited if it's a promise
-    user.id = await get_userID(); // Ensure this is awaited if it's a promise
+    username = await get_username(); // Ensure this is awaited if it's a promise
+    userID = await get_userID(); // Ensure this is awaited if it's a promise
 
-    const filesInfo = await GetUserFiles(user.id); // Fetch user files
+    const filesInfo = await GetUserFiles(userID); // Fetch user files
     console.log('Fetched files:', filesInfo); // Debugging line
 
     const fileList = document.getElementById('file-list'); // Get the file list element

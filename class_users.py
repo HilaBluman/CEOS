@@ -242,7 +242,7 @@ class ChangeLogDatabase:
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
-        # Create changeLog table
+        # Create changeLog table with modification as TEXT
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS changeLog (
                 fileID INTEGER,
@@ -272,7 +272,8 @@ class ChangeLogDatabase:
         ''', (fileID, lastModID))
         
         changes = cursor.fetchall()
-        return [dict(change) for change in changes]  # Return changes as a list of dictionaries
+        return [self._deserialize_change(change) for change in changes]  # Deserialize JSON
+
     def get_changes_by_fileID(self, fileID):
         conn = self.get_db_connection()
         cursor = conn.cursor()
@@ -283,17 +284,20 @@ class ChangeLogDatabase:
         ''', (fileID,))
         
         changes = cursor.fetchall()
-        return [dict(change) for change in changes]  # Return changes as a list of dictionaries
+        return [self._deserialize_change(change) for change in changes]  # Deserialize JSON
     
     def add_modification(self, fileID, modification, modBy):
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
+        # Ensure modification is a JSON-serializable object
+        modification_json = json.dumps(modification)
+        
         try:
             cursor.execute('''
                 INSERT INTO changeLog (fileID, modification, modBy) 
                 VALUES (?, ?, ?)
-            ''', (fileID, modification, modBy))
+            ''', (fileID, modification_json, modBy))
             conn.commit()
             return {'status': 201, 'message': 'Modification added successfully.'}
         except Exception as e:
@@ -301,6 +305,11 @@ class ChangeLogDatabase:
         finally:
             conn.close()
 
+    def _deserialize_change(self, change):
+        """Convert the change dictionary to include deserialized JSON."""
+        change_dict = dict(change)
+        change_dict['modification'] = json.loads(change_dict['modification'])  # Deserialize JSON
+        return change_dict
     
 def main():
     DB_PATH = "/Users/hila/CEOs/users.db"
