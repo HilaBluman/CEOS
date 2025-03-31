@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import random
+import threading
 
 
 class UserDatabase:
@@ -236,26 +237,28 @@ class FilePermissionsDatabase:
 class ChangeLogDatabase:
     def __init__(self, db_path):
         self.db_path = db_path
+        self.lock = threading.Lock()  # Create a lock for thread safety
         self.create_change_log_table()
 
     def create_change_log_table(self):
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        
-        # Create changeLog table with modification as TEXT
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS changeLog (
-                fileID INTEGER,
-                modification TEXT NOT NULL,
-                modBy INTEGER,
-                Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                ModID INTEGER PRIMARY KEY AUTOINCREMENT,
-                FOREIGN KEY (modBy) REFERENCES users(userID)
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
+        with self.lock:  # Ensure that table creation is thread-safe
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            
+            # Create changeLog table with modification as TEXT
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS changeLog (
+                    fileID INTEGER,
+                    modification TEXT NOT NULL,
+                    modBy INTEGER,
+                    Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    ModID INTEGER PRIMARY KEY AUTOINCREMENT,
+                    FOREIGN KEY (modBy) REFERENCES users(userID)
+                )
+            ''')
+            
+            conn.commit()
+            conn.close()
 
     def get_db_connection(self):
         conn = sqlite3.connect(self.db_path)
@@ -263,47 +266,50 @@ class ChangeLogDatabase:
         return conn
 
     def get_changes(self, fileID, lastModID):
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT * FROM changeLog 
-            WHERE fileID = ? AND ModID > ?
-        ''', (fileID, lastModID))
-        
-        changes = cursor.fetchall()
-        return [self._deserialize_change(change) for change in changes]  # Deserialize JSON
+        with self.lock:  # Ensure that reading changes is thread-safe
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT * FROM changeLog 
+                WHERE fileID = ? AND ModID > ?
+            ''', (fileID, lastModID))
+            
+            changes = cursor.fetchall()
+            return [self._deserialize_change(change) for change in changes]  # Deserialize JSON
 
     def get_changes_by_fileID(self, fileID):
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT * FROM changeLog 
-            WHERE fileID = ?
-        ''', (fileID,))
-        
-        changes = cursor.fetchall()
-        return [self._deserialize_change(change) for change in changes]  # Deserialize JSON
+        with self.lock:  # Ensure that reading changes is thread-safe
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT * FROM changeLog 
+                WHERE fileID = ?
+            ''', (fileID,))
+            
+            changes = cursor.fetchall()
+            return [self._deserialize_change(change) for change in changes]  # Deserialize JSON
     
     def add_modification(self, fileID, modification, modBy):
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        
-        # Ensure modification is a JSON-serializable object
-        modification_json = json.dumps(modification)
-        
-        try:
-            cursor.execute('''
-                INSERT INTO changeLog (fileID, modification, modBy) 
-                VALUES (?, ?, ?)
-            ''', (fileID, modification_json, modBy))
-            conn.commit()
-            return {'status': 201, 'message': 'Modification added successfully.'}
-        except Exception as e:
-            return {'status': 500, 'message': str(e)}
-        finally:
-            conn.close()
+        with self.lock:  # Ensure that adding a modification is thread-safe
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            
+            # Ensure modification is a JSON-serializable object
+            modification_json = json.dumps(modification)
+            
+            try:
+                cursor.execute('''
+                    INSERT INTO changeLog (fileID, modification, modBy) 
+                    VALUES (?, ?, ?)
+                ''', (fileID, modification_json, modBy))
+                conn.commit()
+                return {'status': 201, 'message': 'Modification added successfully.'}
+            except Exception as e:
+                return {'status': 500, 'message': str(e)}
+            finally:
+                conn.close()
 
     def _deserialize_change(self, change):
         """Convert the change dictionary to include deserialized JSON."""

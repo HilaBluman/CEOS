@@ -4,7 +4,7 @@ from main_server import start_main_server
 
 def main():
     print()
-    host = "172.20.10.9" #'192.168.1.110'
+    host = "192.168.68.56" #'192.168.1.110'
     # Create threads for both servers
     polling_thread = threading.Thread(target=start_polling_server, args=(host, 8001))
     main_thread = threading.Thread(target=start_main_server, args=(host, 8000))
