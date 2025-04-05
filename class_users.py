@@ -264,6 +264,22 @@ class ChangeLogDatabase:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+    
+    def get_last_mod_id(self, fileID):
+        with self.lock:  # Ensure that getting the last ModID is thread-safe
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT MAX(ModID) AS lastModID FROM changeLog 
+                WHERE fileID = ?
+            ''', (fileID,))
+            
+            last_mod_id = cursor.fetchone()
+            if last_mod_id and last_mod_id['lastModID']:
+                return last_mod_id['lastModID']
+            else:
+                return 0  # Return 0 if no modifications have been made
 
     def get_changes(self, fileID, lastModID):
         with self.lock:  # Ensure that reading changes is thread-safe
@@ -271,12 +287,12 @@ class ChangeLogDatabase:
             cursor = conn.cursor()
             
             cursor.execute('''
-                SELECT * FROM changeLog 
+                SELECT modification, ModID FROM changeLog 
                 WHERE fileID = ? AND ModID > ?
             ''', (fileID, lastModID))
             
             changes = cursor.fetchall()
-            return [self._deserialize_change(change) for change in changes]  # Deserialize JSON
+            return [{'modification': json.loads(change['modification']), 'ModID': change['ModID']} for change in changes]  # Deserialize JSON
 
     def get_changes_by_fileID(self, fileID):
         with self.lock:  # Ensure that reading changes is thread-safe

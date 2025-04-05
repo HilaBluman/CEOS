@@ -1,7 +1,8 @@
 let codeEditor;
 let isEditorReady = false; // Global flag to track editor readiness
-const host = '192.168.1.110'
-const original_url = 'http://'+ host +':8000'
+const host = '192.168.68.56'
+const main_url = 'http://'+ host +':8000'
+const polling_url = 'http://'+ host +':8001'
 
 require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' }});
 async function initializeEditor() {
@@ -76,15 +77,19 @@ let highlightedTxt = {start: -1, end: -1, selectedText: ""}
 let fileID = 0;     // changes after pciking a file
 let userID = 0;
 let username = "";
+let lastModID = -1; 
 
 
 // Functionality Constants
 const DEBOUNCE_DELAY = 500; // ms
 const MIN_WIDTH = 80;
 const MAX_WIDTH = window.innerWidth * 0.8;
+let pollingInterval;
+
 document.addEventListener('DOMContentLoaded', async () => {
     console.log("works")
     await loadInitialFile();
+    startPolling(); // Start polling after initial file load
 });
 
 document.addEventListener('mousemove', onDocumentMouseMove);
@@ -293,7 +298,10 @@ function pageHide(event){
     console.log("in pageHide")
     if (event.persisted) {
         console.log("Page is being persisted in cache.");
-    } else {console.log("Page is being discarded.");}
+    } else {
+        console.log("Page is being discarded.");
+        stopPolling();
+    }
 
     fetch('/disconnection', {
         method: 'POST',
@@ -305,7 +313,7 @@ function pageHide(event){
             timestamp: new Date().toISOString()
         })
     });
-};
+}
 
 function onKeyZ(event){
     if (event.metaKey && event.key === 'z') {
@@ -387,9 +395,9 @@ async function saveInput(modification) {
 }
 
 async function loadContent(fileId) {
-
     try {
-        const response = await fetch(`/load`, {
+        console.log('/load')
+        const response = await fetch('/load', {
             method: 'GET',
             headers: { 
                 'fileId': fileId,
@@ -400,7 +408,9 @@ async function loadContent(fileId) {
         const data = await response.json();
         if (data.fullContent) {
             // Set the content in the Monaco editor
-            isLoaded = true
+            isLoaded = true;
+            lastModID = data.lastModID;
+            console.log("lastModID: " + lastModID);
             codeEditor.setValue(data.fullContent);
         }
     } catch (error) {
@@ -565,4 +575,138 @@ async function runFile() {
         outputArea.textContent = `Error: ${error.message}`;
     }
 }
+
+async function applyUpdate(update) {
+    try {
+        const model = codeEditor.getModel();
+        if (!model) return;
+
+        // Create a range for the update
+        const range = new monaco.Range(
+            update.startLineNumber,
+            update.startColumn,
+            update.endLineNumber,
+            update.endColumn
+        );
+
+        // Apply the update using the editor's executeEdits method
+        codeEditor.executeEdits('', [{
+            range: range,
+            text: update.newText
+        }]);
+
+        // If there are any decorations to apply (like highlighting changes)
+        if (update.highlight) {
+            const decorations = [{
+                range: range,
+                options: {
+                    className: 'highlighted-update',
+                    hoverMessage: { value: 'Updated by another user' }
+                }
+            }];
+            
+            // Apply decorations and remove them after 3 seconds
+            const decorationIds = codeEditor.deltaDecorations([], decorations);
+            setTimeout(() => {
+                codeEditor.deltaDecorations(decorationIds, []);
+            }, 3000);
+        }
+    } catch (error) {
+        console.error('Error applying partial update:', error);
+    }
+}
+
+async function pollForUpdates() {
+    if (!fileID || !userID) {
+        console.log('Skipping poll - no file or user selected');
+        return;
+    }
+
+    try {
+        console.log('Polling with fileID:', fileID, 'lastModID:', lastModID);
+        const response = await fetch('/poll-updates', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'fileID': fileID,
+                'userID': userID,
+                'lastModID': lastModID,
+                'Connection': 'close'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (data == "No updates") {
+            console.log('No updates available');
+            return;
+        }
+        else if (Array.isArray(data) && data.length > 0) {
+            console.log('Received updates:', data);
+            // Process all updates in order
+            for (const update of data) {
+                console.log("Applying update with ModID:", update.ModID);
+                lastModID = update.ModID;
+                await applyUpdate(update.modification);
+            }
+        }
+        else {
+            console.log('Invalid update format received:', data);
+        }
+
+    } catch (error) {
+        if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+            console.log('Connection error during polling - will retry next interval');
+        } else {
+            console.error('Error polling for updates:', error);
+        }
+    }
+}
+
+function startPolling() {
+    // Poll every 10 seconds
+    pollingInterval = setInterval(pollForUpdates, 10000);
+}
+
+function stopPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+}
+
+
+
+
+
+async function sendToPollingServer(endpoint, method = 'GET', headers = {}, body = null) {
+    try {
+        const response = await fetch(polling_url + endpoint, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                ...headers
+            },
+            body: body ? JSON.stringify(body) : null
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error sending request to polling server:', error);
+        throw error;
+    }
+}
+
+// Example usage:
+// To send a request to the polling server:
+// const result = await sendToPollingServer('/some-endpoint', 'POST', { 'custom-header': 'value' }, { data: 'some data' });
+
 // end

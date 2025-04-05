@@ -144,6 +144,7 @@ def run_file(client_socket, file, PATH_TO_FOLDER):
         return
         
     file_path = f"{PATH_TO_FOLDER}/uploads/{file}"
+    print("file_path: "  + file_path )
     working_dir = f"{PATH_TO_FOLDER}/uploads"
     
     try:
@@ -179,7 +180,7 @@ def run_file(client_socket, file, PATH_TO_FOLDER):
 def get_header(client_socket, headers_data, header=r'filename:\s*(\S+)'):
     header_match = re.search(header, headers_data)
     if not header_match:
-        client_socket.send(ready_to_send("406 Not Acceptable", f" header not found file", "text/plain").encode())
+        client_socket.send(ready_to_send("406 Not Acceptable", f" header not found", "text/plain").encode())
         return "header not found file"
     return header_match.group(1)
 
@@ -197,6 +198,12 @@ def get_countent_len(client_socket, headers_data):
         client_socket.send(ready_to_send("406 Not Acceptable", f" no file-length", "text/plain").encode())
         return "no file"
     return match.group(1)
+
+def check_for_updates(fileID, lastModID):
+
+    # Fetch changes from the database
+    changes = change_log_db.get_changes(fileID, lastModID)
+    return changes
 
 
 def modify_file(row, action, content, file_path, new_lines_length):
@@ -259,7 +266,6 @@ def handle_client(client_socket, client_address, num_thread):
     FORBIDDEN = {PATH_TO_FOLDER + r"/status_code/404.png", PATH_TO_FOLDER + r"/status_code/life.txt",
                  PATH_TO_FOLDER + r"/status_code/500.png"}
 
-    #print(f"New connection from {client_address} in thread {num_thread}")
     try:
         print("Waiting for request...")
         try:
@@ -276,15 +282,39 @@ def handle_client(client_socket, client_address, num_thread):
 
             print(f"Client {client_address} wants to: '{action}'")
             headers_data = data
-            #print("------------------")
-            #print("Client sent headers:" + headers_data)
-            #print("------------------")
 
             if action == "GET ":
                 end = headers_data.find(r"HTTP") - 1
-                request = headers_data[:end]  # for windows add .replace("/", "\\")
+                request = headers_data[:end]
 
-                if "/save" in headers_data:
+                if "/poll-updates" in headers_data:
+                    try:
+                        print("in poll-updates")
+                        fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
+                        lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)')
+                        
+                        # Check for updates
+                        updates = check_for_updates(fileID, lastModID)
+                        print("updates:", updates)
+                        
+                        if updates:
+                            response = ready_to_send(200, json.dumps(updates), content_type="application/json")
+                        else:
+                            response = ready_to_send(200, json.dumps("No updates"), content_type="application/json")
+                        try:
+                            client_socket.send(response.encode())
+                        except BrokenPipeError:
+                            print("Client disconnected before response could be sent")
+                            return
+                    except Exception as e:
+                        print(f"Error in poll-updates: {str(e)}")
+                        try:
+                            handle_500(client_socket)
+                        except BrokenPipeError:
+                            print("Client disconnected during error handling")
+                            return
+
+                elif "/save" in headers_data:
                     print("------------------")
                     print("in save")
                     decoded_request = urllib.parse.unquote(request)
@@ -380,8 +410,13 @@ def handle_client(client_socket, client_address, num_thread):
                                     })
 
                             print("loaded successfully")
-                            response = ready_to_send("200 OK", response_data, "application/json")
-                            client_socket.send(response.encode() + response_data.encode('utf-8'))
+                            lastModID = change_log_db.get_last_mod_id(fileId)
+                            response_data = {
+                                'lastModID': lastModID,
+                                'fullContent': content
+                            }
+                            response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
+                            client_socket.send(response.encode())
 
                     except Exception as e:
                         print(f"Error in load handler: {str(e)}")
