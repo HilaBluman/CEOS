@@ -1,9 +1,10 @@
 create:
 what is async??? (read about it)
-
-
 the list of the files the user can acces on the side
 when pressing on the file names need to switch to the file.
+name of the file at the top
+allow the creater of the file to allow users to access file
+creating a new file
 
 
 points for later:
@@ -11,8 +12,14 @@ points for later:
     create a unique file id
     enter permissions for the users that can edit
 
+applyUpdate bugs:
+⚪️ hendle delete
+⚪️ hendle pasting
+⚪️ hendle a new row
+⚪️ hendle writing in the last row
 
 bugs:
+
 ⚪️ the code editor does not show the options of completion to the word
 ⚪️ fix paste func (have a problem with a lot of lines - maybe lock is the solution?)
 

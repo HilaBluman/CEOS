@@ -274,23 +274,23 @@ def handle_client(client_socket, client_address, num_thread):
                 print(action)
                 return  # Exit the function
 
-            print(f"Client {client_address} wants to: '{action}'")
+            
             headers_data = data
 
             if action == "GET ":
                 end = headers_data.find(r"HTTP") - 1
                 request = headers_data[:end]
+                if not "/poll-updates" in headers_data:
+                    print(f"Client {client_address} wants to: '{action}'")
 
                 if "/poll-updates" in headers_data:
                     try:
-                        print("in poll-updates")
                         fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
                         lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)')
                         userID = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
                         
                         # Check for updates
                         updates = change_log_db.get_changes_for_user(fileID,lastModID, userID)
-                        print("updates:", updates)
                         
                         if updates:
                             response = ready_to_send(200, json.dumps(updates), content_type="application/json")
@@ -458,6 +458,7 @@ def handle_client(client_socket, client_address, num_thread):
                     handle_500(client_socket)
 
             elif action == "POST":
+                print(f"Client {client_address} wants to: '{action}'")
                 try:
                     match = re.search(r'Content-Length: (\d+)', headers_data)
                     if not match:
@@ -486,15 +487,6 @@ def handle_client(client_socket, client_address, num_thread):
                         body = ""
                         if content_length > 0:
                             body = client_socket.recv(content_length).decode()
-                        """try:
-                            data = json.loads(body)  # Parse the JSON body
-                            user_id = data.get('userId')  # Access userId from the body
-                            timestamp = data.get('timestamp')  # Access timestamp from the body
-                            print(f'User  ID: {user_id}, Timestamp: {timestamp}')
-                            with open(file_path, 'w', encoding='utf-8') as file:
-                                file.write(f'User  ID: {user_id}, Timestamp: {timestamp}')
-                        except json.JSONDecodeError:
-                            print('Failed to decode JSON')"""
                         return  # Exit the function
 
                     elif "/upload" in headers_data: 
@@ -525,8 +517,9 @@ def handle_client(client_socket, client_address, num_thread):
 
     finally:
         client_socket.close()
-        print(f"Disconnected client {client_address}")
-        print("_________________________")
+        if not "/poll-updates" in headers_data: 
+            print(f"Disconnected client {client_address}")
+            print("_________________________")
 
 def start_main_server(host='127.0.0.1', port=8000):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -90,7 +90,6 @@ let pollingInterval;
 document.addEventListener('DOMContentLoaded', async () => {
     console.log("works")
     await loadInitialFile();
-    startPolling(); // Start polling after initial file load
 });
 
 document.addEventListener('mousemove', onDocumentMouseMove);
@@ -444,6 +443,7 @@ async function loadSelectedFile() {
         await loadContent(selectedFileId); // Load the content of the selected file
         fileID = selectedFileId
         closeFilePopup(); // Close the popup after loading
+        startPolling(); // Start polling after initial file load
     } else {
         alert('Please select a file to load.');
     }
@@ -630,7 +630,6 @@ async function pollForUpdates() {
     }
 
     try {
-        console.log('Polling with fileID:', fileID, 'lastModID:', lastModID);
         const response = await fetch('/poll-updates', {
             method: 'GET',
             headers: {
@@ -649,11 +648,10 @@ async function pollForUpdates() {
         const data = await response.json();
         
         if (data == "No updates") {
-            console.log('No updates available');
+            //console.log('No updates available');
             return;
         }
         else if (Array.isArray(data) && data.length > 0) {
-            console.log('Received updates:', data);
             // Process all updates in order
             for (const update of data) {
                 console.log("Applying update with ModID:", update.ModID);
@@ -677,7 +675,7 @@ async function pollForUpdates() {
 
 function startPolling() {
     // Poll every 10 seconds
-    pollingInterval = setInterval(pollForUpdates, 10000);
+    pollingInterval = setInterval(pollForUpdates, 1000);
 }
 
 function stopPolling() {
