@@ -581,36 +581,33 @@ async function applyUpdate(update) {
         const model = codeEditor.getModel();
         if (!model) return;
 
-        // Create a range for the update
+        // Create a range for the update based on the row
         const range = new monaco.Range(
-            update.startLineNumber,
-            update.startColumn,
-            update.endLineNumber,
-            update.endColumn
+            update.row + 1,  // Convert 0-based to 1-based
+            1,              // Start at beginning of line
+            update.row + 1, // Same line
+            update.content.length + 1 // End at end of content
         );
 
         // Apply the update using the editor's executeEdits method
         codeEditor.executeEdits('', [{
             range: range,
-            text: update.newText
+            text: update.content
         }]);
 
-        // If there are any decorations to apply (like highlighting changes)
-        if (update.highlight) {
-            const decorations = [{
-                range: range,
-                options: {
-                    className: 'highlighted-update',
-                    hoverMessage: { value: 'Updated by another user' }
-                }
-            }];
-            
-            // Apply decorations and remove them after 3 seconds
-            const decorationIds = codeEditor.deltaDecorations([], decorations);
-            setTimeout(() => {
-                codeEditor.deltaDecorations(decorationIds, []);
-            }, 3000);
-        }
+        // Highlight the updated line
+        const decorations = [{
+            range: range,
+            options: {
+                className: 'highlighted-update'
+            }
+        }];
+        
+        // Apply decorations and remove them after 3 seconds
+        const decorationIds = codeEditor.deltaDecorations([], decorations);
+        setTimeout(() => {
+            codeEditor.deltaDecorations(decorationIds, []);
+        }, 3000);
     } catch (error) {
         console.error('Error applying partial update:', error);
     }
@@ -651,6 +648,7 @@ async function pollForUpdates() {
             for (const update of data) {
                 console.log("Applying update with ModID:", update.ModID);
                 lastModID = update.ModID;
+                console.log("modification: " + JSON.stringify(update.modification, null, 2));
                 await applyUpdate(update.modification);
             }
         }

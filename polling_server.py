@@ -7,6 +7,10 @@ from class_users import ChangeLogDatabase  # Importing ChangeLogDatabase from cl
 db_path = 'path_to_your_db'  # Specify the path to your database
 change_log_db = ChangeLogDatabase(db_path)
 
+# Add main server URL
+MAIN_SERVER_URL = 'http://192.168.1.110:8000'  # Update this to match your main server's URL
+
+
 def receive_headers(client_socket):
     # Receiving only the headers
     headers = b""
@@ -43,13 +47,7 @@ def ready_to_send(status, data_file, content_type="text/html"):
     return headers + str(data_file)  # Combine headers and body content
 
 def check_for_updates(fileID, lastModID):
-    """
-    Check for updates in the changeLog for a specific fileID since lastModID.
-    
-    :param fileID: The ID of the file to check for updates.
-    :param lastModID: The last modification ID received from the client.
-    :return: A list of changes if there are updates, otherwise an empty list.
-    """
+
     # Fetch changes from the database
     changes = change_log_db.get_changes(fileID, lastModID)
     return changes
@@ -64,9 +62,10 @@ def handle_polling_request(client_socket):
         # Receive the request from the client
         action, headers = receive_headers(client_socket)
         
-        if action != "POST":
+        if action != "GET":
             response = ready_to_send(400, "Invalid request method")
             client_socket.sendall(response.encode())
+            client_socket.close()
             return
         
         # Parse the request body to get fileID and lastModID
