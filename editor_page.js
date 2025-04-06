@@ -64,6 +64,7 @@ function useCodeEditor(callback) {
 
 
 // Flags and Variables
+let isApplyingUpdates = false;
 let isResizing = false;
 let startX;
 let startOutputWidth;
@@ -102,6 +103,10 @@ window.addEventListener("pagehide", pageHide);
 
 useCodeEditor((editor) => {
     editor.onDidChangeModelContent((event) => {
+        if (isApplyingUpdates) {
+            // Skip the logic if updates are being applied
+            return;
+        }
         if (isLoaded) {
             isLoaded = false;
             return} 
@@ -388,6 +393,7 @@ async function saveInput(modification) {
 
         const result = await response.text();
         console.log('Save result:', result);
+        await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (error) {
         console.error('Error saving file:', error);
         return
@@ -578,6 +584,7 @@ async function runFile() {
 
 async function applyUpdate(update) {
     try {
+        isApplyingUpdates = true;
         const model = codeEditor.getModel();
         if (!model) return;
 
@@ -610,6 +617,9 @@ async function applyUpdate(update) {
         }, 3000);
     } catch (error) {
         console.error('Error applying partial update:', error);
+    }
+    finally {
+        isApplyingUpdates = false; // Reset the flag after applying updates
     }
 }
 

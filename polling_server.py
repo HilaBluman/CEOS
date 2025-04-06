@@ -46,10 +46,10 @@ def ready_to_send(status, data_file, content_type="text/html"):
     
     return headers + str(data_file)  # Combine headers and body content
 
-def check_for_updates(fileID, lastModID):
+def check_for_updates(fileID, lastModID, userID):
 
     # Fetch changes from the database
-    changes = change_log_db.get_changes(fileID, lastModID)
+    changes = change_log_db.get_changes_for_user(fileID, lastModID,userID)
     return changes
 
 def handle_polling_request(client_socket):
@@ -74,9 +74,10 @@ def handle_polling_request(client_socket):
         
         fileID = request_data.get("fileID")
         lastModID = request_data.get("lastModID")
+        userID = request_data.get("userID")
         
         # Check for updates
-        updates = check_for_updates(fileID, lastModID)
+        updates = check_for_updates(fileID, lastModID, userID)
         
         if updates:
             response = ready_to_send(200, updates, content_type="application/json")

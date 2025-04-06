@@ -253,6 +253,7 @@ class ChangeLogDatabase:
                     modBy INTEGER,
                     Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     ModID INTEGER PRIMARY KEY AUTOINCREMENT,
+                    FOREIGN KEY (fileID) REFERENCES fileInfo(fileID),
                     FOREIGN KEY (modBy) REFERENCES users(userID)
                 )
             ''')
@@ -281,15 +282,15 @@ class ChangeLogDatabase:
             else:
                 return 0  # Return 0 if no modifications have been made
 
-    def get_changes(self, fileID, lastModID):
+    def get_changes_for_user(self, fileID, lastModID, userID):
         with self.lock:  # Ensure that reading changes is thread-safe
             conn = self.get_db_connection()
             cursor = conn.cursor()
             
             cursor.execute('''
                 SELECT modification, ModID FROM changeLog 
-                WHERE fileID = ? AND ModID > ?
-            ''', (fileID, lastModID))
+                WHERE fileID = ? AND ModID > ? AND modBy != ?
+            ''', (fileID, lastModID,userID))
             
             changes = cursor.fetchall()
             return [{'modification': json.loads(change['modification']), 'ModID': change['ModID']} for change in changes]  # Deserialize JSON
@@ -306,7 +307,7 @@ class ChangeLogDatabase:
             
             changes = cursor.fetchall()
             return [self._deserialize_change(change) for change in changes]  # Deserialize JSON
-    
+
     def add_modification(self, fileID, modification, modBy):
         with self.lock:  # Ensure that adding a modification is thread-safe
             conn = self.get_db_connection()
@@ -334,7 +335,10 @@ class ChangeLogDatabase:
         return change_dict
     
 def main():
-    DB_PATH = "/Users/hila/CEOs/users.db"
+    ChangeLogDatabase("/Users/hila/CEOs/users.db").create_change_log_table()
+    FilePermissionsDatabase("/Users/hila/CEOs/users.db").create_file_permissions_table()
+    FileInfoDatabase("/Users/hila/CEOs/users.db").create_file_info_table()
+    UserDatabase("/Users/hila/CEOs/users.db").create_user_database()
     print("fin")
 
 if __name__ == "__main__":

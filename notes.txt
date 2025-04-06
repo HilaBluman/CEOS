@@ -1,8 +1,6 @@
 create:
-fix file name pos
 what is async??? (read about it)
-other client can see the output of the other client
-other client can edit the file
+
 
 the list of the files the user can acces on the side
 when pressing on the file names need to switch to the file.
@@ -15,11 +13,18 @@ points for later:
 
 
 bugs:
-// change the urls in the js files from http://127.0.0.1:8000/ to the real one.
-⚪️ handle disconnection
 ⚪️ the code editor does not show the options of completion to the word
 ⚪️ fix paste func (have a problem with a lot of lines - maybe lock is the solution?)
 
+
+
+done:
+✔️ other client can see the output of the other client
+✔️ other client can edit the file
+✔️ change to use actions instead of sending all the content like delete (number row),change (this row), add a row and more.
+✔️ add syntax highlight - monoco editor
+✔️ handle disconnection
+✔️ change the urls in the js files from http://127.0.0.1:8000/ to the real one.
 ✔️ does not send the whole js or html file - was a problem in the ready to send func
 ✔️ save is lag and slow  ???(could be because of the reconnection problem ) - disconnect after each request
 ✔️ when useing it keeps on reconnection (does not really disconnect) - disconnects after each request
@@ -32,11 +37,6 @@ bugs:
 ✔️ when updating a line the rest of the data after said line.
 ✔️ when it disconnect i get these errors in the console log 1. Failed to load resource: net:ERR_CONTENT_LENGTH_MISMATCH  2. Error saving file: TypeError: Failed to fetch saveInput. it happens when Timeout while receiving headers - gets onr byte at a time.
 ✔️save is lag and slow
-
-
-done:
-✔️ change to use actions instead of sending all the content like delete (number row),change (this row), add a row and more.
-✔️ add syntax highlight - monoco editor
 
 check on:
 ⚪️ need protection from code & SCL injctions. 

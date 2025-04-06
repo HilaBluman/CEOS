@@ -199,12 +199,6 @@ def get_countent_len(client_socket, headers_data):
         return "no file"
     return match.group(1)
 
-def check_for_updates(fileID, lastModID):
-
-    # Fetch changes from the database
-    changes = change_log_db.get_changes(fileID, lastModID)
-    return changes
-
 
 def modify_file(row, action, content, file_path, new_lines_length):
     try:
@@ -292,9 +286,10 @@ def handle_client(client_socket, client_address, num_thread):
                         print("in poll-updates")
                         fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
                         lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)')
+                        userID = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
                         
                         # Check for updates
-                        updates = check_for_updates(fileID, lastModID)
+                        updates = change_log_db.get_changes_for_user(fileID,lastModID, userID)
                         print("updates:", updates)
                         
                         if updates:
