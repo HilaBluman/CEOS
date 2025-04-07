@@ -1,8 +1,5 @@
 create:
 what is async??? (read about it)
-the list of the files the user can acces on the side
-when pressing on the file names need to switch to the file.
-name of the file at the top
 allow the creater of the file to allow users to access file
 creating a new file
 
@@ -14,7 +11,7 @@ points for later:
 
 applyUpdate bugs:
 ⚪️ hendle delete
-⚪️ hendle pasting
+⚪️ hendle pasting - when pasting more then 1 line it replaces the lines below (one line good)
 ⚪️ hendle a new row
 ⚪️ hendle writing in the last row
 
@@ -26,6 +23,9 @@ bugs:
 
 
 done:
+✔️ the list of the files the user can acces on the side
+✔️ when pressing on the file names need to switch to the file.
+✔️name of the file at the top
 ✔️ other client can see the output of the other client
 ✔️ other client can edit the file
 ✔️ change to use actions instead of sending all the content like delete (number row),change (this row), add a row and more.

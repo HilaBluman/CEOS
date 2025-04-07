@@ -200,7 +200,7 @@ def get_countent_len(client_socket, headers_data):
     return match.group(1)
 
 
-def modify_file(row, action, content, file_path, new_lines_length):
+def modify_file(row, action, content, file_path, lines_length_of_countent):
     try:
         with open(file_path, 'r', encoding='utf-8', newline=None) as file:
             lines = file.readlines()  # Read all lines into a list
@@ -221,12 +221,11 @@ def modify_file(row, action, content, file_path, new_lines_length):
             else:
                 raise ValueError("Row number is out of bounds.")
             
-        elif action == "insert":
+        elif action == "insert" or action == "paste":
             print(f"Attempting to insert: {row}")
             if row > len(lines):
                 print(f"at end of file: {row}")
-                content = content + "\n\r" #+ content
-                lines.insert(row, content) 
+                lines.insert(row, content +"\n\r" ) 
             else:
                 print("enter in mid of line ")
                 lines.insert(row, content + "\r")         
@@ -261,10 +260,8 @@ def handle_client(client_socket, client_address, num_thread):
                  PATH_TO_FOLDER + r"/status_code/500.png"}
 
     try:
-        print("Waiting for request...")
         try:
             action, data = receive_headers(client_socket)
-            print("_________________________")
             if action == "client disconnected":
                 print(action)
                 client_socket.close()
@@ -277,11 +274,13 @@ def handle_client(client_socket, client_address, num_thread):
             
             headers_data = data
 
+            if not "/poll-updates" in headers_data:
+                    print("_________________________")
+                    print(f"Client {client_address} wants to: '{action}'")
+
             if action == "GET ":
                 end = headers_data.find(r"HTTP") - 1
                 request = headers_data[:end]
-                if not "/poll-updates" in headers_data:
-                    print(f"Client {client_address} wants to: '{action}'")
 
                 if "/poll-updates" in headers_data:
                     try:
@@ -458,7 +457,6 @@ def handle_client(client_socket, client_address, num_thread):
                     handle_500(client_socket)
 
             elif action == "POST":
-                print(f"Client {client_address} wants to: '{action}'")
                 try:
                     match = re.search(r'Content-Length: (\d+)', headers_data)
                     if not match:
@@ -533,7 +531,6 @@ def start_main_server(host='127.0.0.1', port=8000):
     while True:
         try:
             client_socket, client_address = server_socket.accept()
-            print(f'New client connected: {client_address}')
 
             num_thread = num_thread + 1
 

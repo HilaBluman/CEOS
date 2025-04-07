@@ -1,7 +1,7 @@
 :root {
   --primary: #1e1e32; /* Darker for sidebar */
   --secondary: #282a36; /* Darker for main background */
-  --accent: #bd93f9; /* Brighter accent color */
+  --accent: #b585f9; /* Brighter accent color */
   --text: #f8f8f2; /* Light text color */
   --comment: #6272a4; /* Comment color for code texts */
 }
@@ -45,10 +45,11 @@ width: 100%; /* Full width */
   left: 0;
   width: 100%;
   height: 50px;
-  background: #252526;
+  background: var(--primary);
   display: flex;
   align-items: center;
   padding: 0 15px;
+  border-bottom: 1px solid #404556;
 }
 
 .menu-icon {
@@ -273,3 +274,47 @@ button:hover {
     background-color: #742ede; /* Purple background for selected item */
     color: #fff; /* White text for better contrast */
 }
+
+/* Highlighted updates styling */
+.highlighted-update {
+    background-color: rgba(248, 110, 186, 0.5);
+    border: 1px solid rgba(230, 121, 244, 0.5);
+}
+
+.cursor-line {
+  border-left: 2px solid #f147b0;
+  margin-left: 1px;
+  pointer-events: none;
+  background-color: rgba(217, 44, 182, 0.703);
+}
+
+.editor-tabs {
+    background: #1e1e1e;
+    padding: 0.15rem 0.5rem;
+    border-bottom: 1px solid #404556;
+    display: flex;
+    align-items: center;
+    height: 35px;
+}
+
+.active-tab {
+    background: #A970FF;
+    padding: 0.15rem 0.5rem;
+    border-radius: 2px;
+    color: #140d0d;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.85em;
+}
+
+.inactive-tab {
+    background: #1e1e1e;;
+    padding: 0.15rem 0.5rem;
+    border-radius: 2px;
+    color: #1e1e1e;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.85em;
+} 

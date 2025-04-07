@@ -25,18 +25,20 @@
       </div>
       
       <h3>Files</h3> 
-      <ul class="file-tree">
-        <li id="file-name"> 📄 </li>
-        <li>📄 index.html</li>
-        <li>📄 main.js</li>
-        <li>📄 styles.css</li>
+      <ul class="file-tree" id="file-tree">
+        <!-- Files will be populated here -->
       </ul>
     </div>
 
 
     <div class="main">
+        <div class="editor-tabs">
+            <div class="inactive-tab" id="current-file-tab">
+                <span id="current-file-name"></span>
+            </div>
+        </div>
         <div id="editor-container"></div>
-      </div>
+    </div>
 
 
       <div class="right-panel">
