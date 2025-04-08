@@ -1,8 +1,7 @@
 let codeEditor;
 let isEditorReady = false; // Global flag to track editor readiness
-const host = '192.168.68.56'
+const host = '192.168.68.54'
 const main_url = 'http://'+ host +':8000'
-const polling_url = 'http://'+ host +':8001'
 
 require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' }});
 async function initializeEditor() {
@@ -332,6 +331,7 @@ async function loadContent(fileId) {
             console.log("lastModID: " + lastModID);
             codeEditor.setValue(data.fullContent);
         }
+        startPolling();
     } catch (error) {
         console.error('Error loading initial content:', error);
     }
@@ -345,6 +345,8 @@ let selectedFileId = null;
 let selectedFileName = null;
 
 function selectFile(fileId, filename) {
+    //save file id 
+    fileID = fileId;
     selectedFileId = fileId;
     selectedFileName = filename;
     const tab = document.getElementById('current-file-tab');
@@ -356,20 +358,6 @@ function selectFile(fileId, filename) {
     } else {
         tab.classList.remove('active-tab');
         tab.classList.add('inactive-tab');
-    }
-}
-
-async function loadSelectedFile() {
-    if (selectedFileId) {
-        const fileNameElement = document.getElementById('file-name');
-        if (fileNameElement) {
-            fileNameElement.textContent = "📄 " + selectedFileName;}
-        await loadContent(selectedFileId); // Load the content of the selected file
-        fileID = selectedFileId
-        closeFilePopup(); // Close the popup after loading
-        startPolling(); // Start polling after initial file load
-    } else {
-        alert('Please select a file to load.');
     }
 }
 
@@ -660,7 +648,7 @@ async function pollForUpdates() {
 }
 
 function startPolling() {
-    // Poll every 10 seconds
+    // Poll every 1 seconds
     pollingInterval = setInterval(pollForUpdates, 1000);
 }
 
