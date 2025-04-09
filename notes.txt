@@ -10,13 +10,17 @@ points for later:
     enter permissions for the users that can edit
 
 applyUpdate bugs:
-✔️ hendle delete - in teh same row
+⚪️ deleting a line (not highlight) - an empty line 
+✔️ hendle delete 
 ⚪️ hendle pasting -(have a problam with saving paste) when pasting more then 1 line it replaces the lines below (one line good)
 ✔️ hendle a new row
+⚪️ new row in a midell of chacters
+✔️ new row end of file
 ✔️ hendle writing in the last row
 
 bugs:
-
+⚪️ sends the same content from data base to more than 1 time - check lock on db && lock file when writing in to it
+⚪️ have a problam with cmd/crl z
 ⚪️ the code editor does not show the options of completion to the word
 ⚪️ fix paste func (have a problem with a lot of lines - maybe lock is the solution?)
 
@@ -25,7 +29,7 @@ bugs:
 done:
 ✔️ the list of the files the user can acces on the side
 ✔️ when pressing on the file names need to switch to the file.
-✔️name of the file at the top
+✔️ name of the file at the top
 ✔️ other client can see the output of the other client
 ✔️ other client can edit the file
 ✔️ change to use actions instead of sending all the content like delete (number row),change (this row), add a row and more.

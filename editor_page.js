@@ -87,7 +87,6 @@ const MAX_WIDTH = window.innerWidth * 0.8;
 let pollingInterval;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log("works")
     await loadInitialFile();
 });
 
@@ -112,13 +111,9 @@ useCodeEditor((editor) => {
         for (const change of event.changes) {
             const startLineNumber = change.range.startLineNumber; // Starting line number of the change
             const endLineNumber = change.range.endLineNumber;     // Ending line number of the change
-            const changedText = change.text;                     // The new text that was inserted or replaced
+            const changedText = change.text;                      // The new text that was inserted or replaced
             const isPaste = changedText.includes('\n');          // Check if the change is a paste operation
             const isDelete = changedText === '';                 // Check if the change is a delete operation
-
-            // Log the changes for debugging
-            console.log(`Content changed from line ${startLineNumber} to ${endLineNumber}:`);
-            console.log(`Changed text: ${changedText}`);
 
             // Get the current content of the editor
             const fullContent = editor.getValue();
@@ -126,13 +121,6 @@ useCodeEditor((editor) => {
 
             // Determine the action based on the type of change
             let action  = "update";
-            /*if (isDelete) {
-                action = 'delete'; // Handle deletion
-            } else if (isPaste) {
-                action = 'insert'; // Handle pasting (inserting multiple lines)
-            } else {
-                action = 'update'; // Handle regular updates
-            }*/
 
             if (isDelete) {
                 if (isHighlighted){
@@ -148,8 +136,11 @@ useCodeEditor((editor) => {
                 });
                 saveInput(modification);
 
-            }
+            } 
             else if (isPaste) {
+                // Log the changes for debugging
+                console.log(`Content changed from line ${startLineNumber} to ${endLineNumber}:`);
+                console.log(`Changed text: ${changedText}`);
                 // Handle multi-line pasting
                 await handlePaste(editor, startLineNumber, endLineNumber, changedText, lines, change);
             }
@@ -179,13 +170,11 @@ document.getElementById('username-avater').textContent = get_username().charAt(0
 
 function get_username(){
     username = sessionStorage.getItem('username')
-    console.log("username: " + username);
     return username;}
 function get_password(){
     return sessionStorage.getItem('password');}
 function get_userID(){
     userID = sessionStorage.getItem('userId');
-    console.log("userID: " + userID)
     return userID}
 
 function isTextHighlighted() {
@@ -201,7 +190,7 @@ function changeEditorLanguage(newLanguage) {
 }
 
 async function DeleteHighlighted(start, fin ) {  
-    console.log("Delete - start: " + start + " fin: " + fin)
+    //console.log("Delete - start: " + start + " fin: " + fin)
     const action = 'delete'
     for(let i = fin; i > start; i--){
         const modification = JSON.stringify({ content: "", row: i, action, lineLength: 0 });
@@ -209,6 +198,8 @@ async function DeleteHighlighted(start, fin ) {
     }
     codeEditor.focus();
 }
+
+
     
 
 // Helper Functions
@@ -285,14 +276,10 @@ async function saveAll() {
 }
 
 async function saveInput(modification) {
-    //const filename = document.getElementById('file-name').textContent.substring(2);
-    console.log("fileID: " + fileID)
-    //console.log("modification: " + modification);
 
     try {
         const encodedModification = encodeURIComponent(modification);
         const url = "/save?modification=" + encodedModification;
-        console.log("userID: " + userID)
         const response = await fetch(url, {
             method: 'GET',
             headers: { 'fileID': fileID,
@@ -305,8 +292,8 @@ async function saveInput(modification) {
         }
 
         const result = await response.text();
-        console.log('Save result:', result);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        //console.log('Save result:', result);
+        await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
         console.error('Error saving file:', error);
         return
@@ -315,7 +302,6 @@ async function saveInput(modification) {
 
 async function loadContent(fileId) {
     try {
-        console.log('/load')
         const response = await fetch('/load', {
             method: 'GET',
             headers: { 
@@ -323,7 +309,6 @@ async function loadContent(fileId) {
                 'Connection': 'keep-alive'
             }
         });
-
         const data = await response.json();
         if (data.fullContent) {
             // Set the content in the Monaco editor
@@ -335,6 +320,86 @@ async function loadContent(fileId) {
         startPolling();
     } catch (error) {
         console.error('Error loading initial content:', error);
+    }
+}
+
+async function handlePaste(editor, startLineNumber, endLineNumber, changedText, lines, change) {
+    const modifiedLines = changedText.split('\n'); // Get the pasted lines
+
+    // Check if the paste starts in the middle of a line
+    const isFirstLineUpdate = change.range.startColumn > 1;
+    // Check if the paste ends in the middle of a line
+    const isLastLineUpdate = change.range.endColumn < lines[endLineNumber - 1].length + 1;
+    const lines2 = editor.getValue().split('\n');
+
+    // Process the first line
+    if (isFirstLineUpdate) {
+        // If the paste starts in the middle of a line, update the existing line
+        const content = lines2[startLineNumber - 1];
+        const modification = JSON.stringify({
+            content: content,          // First line of the pasted content
+            row: startLineNumber - 1,                       // Convert to 0-based index
+            action: 'update',                                // Update the existing line
+            lineLength: content.length                        // Total number of lines in the editor
+        });
+
+        // Call saveInput with the modification
+        saveInput(modification);
+    } else {
+        const content = modifiedLines[0] || '\n';
+        // If the paste starts at the beginning of a line, treat it as an insert
+        const modification = JSON.stringify({
+            content: content,              // First line of the pasted content, or newline if empty
+            row: startLineNumber,                           // Convert to 0-based index
+            action: 'insert',                               // Insert new line
+            lineLength: content.length                       // Total number of lines in the editor
+        });
+
+        // Call saveInput with the modification
+        saveInput(modification);
+    }
+
+    // Remove the first line from modifiedLines since it's already processed
+    modifiedLines.shift();
+
+    // Process the middle lines (if any)
+    for (const line of modifiedLines.slice(0, -1)) {
+        const content = line || '\n';
+        const modification = JSON.stringify({
+            content: content,                          // The content of the line, or newline if empty
+            row: startLineNumber + modifiedLines.indexOf(line), // Convert to 0-based index
+            action: 'insert',                               // Insert new lines
+            lineLength: content.length                       // Total number of lines in the editor
+        });
+
+        // Call saveInput with the modification
+        await saveInput(modification);
+    }
+
+    // Process the last line
+    if (isLastLineUpdate && modifiedLines.length > 0) {
+        const content = modifiedLines[modifiedLines.length - 1] || '\n';
+        const modification = JSON.stringify({
+            content: content, // Last line of the pasted content, or newline if empty
+            row: startLineNumber + modifiedLines.length - 1,  // Convert to 0-based index
+            action: 'insert',                                 // Update the existing line
+            lineLength: content.length                         // Total number of lines in the editor
+        });
+
+        // Call saveInput with the modification
+        saveInput(modification);
+    } else if (modifiedLines.length > 0) {
+        // Insert the last line as a new line
+        const content = modifiedLines[modifiedLines.length - 1] || '\n';
+        const modification = JSON.stringify({
+            content: content, // Last line of the pasted content, or newline if empty
+            row: startLineNumber + modifiedLines.length - 1,  // Convert to 0-based index
+            action: 'insert',                                 // Insert a new line
+            lineLength: content.length                         // Total number of lines in the editor
+        });
+
+        // Call saveInput with the modification
+        saveInput(modification);
     }
 }
 
@@ -365,7 +430,7 @@ function selectFile(fileId, filename) {
 
 async function GetUserFiles(userId) {
     try {
-        console.log('Fetching files for user ID:', userId); // Debugging line
+        //console.log('Fetching files for user ID:', userId); // Debugging line
         const response = await fetch('/get-user-files', {
             method: 'GET',
             headers: {
@@ -396,7 +461,7 @@ async function loadInitialFile() {
     userID = await get_userID(); // Ensure this is awaited if it's a promise
 
     const filesInfo = await GetUserFiles(userID); // Fetch user files
-    console.log('Fetched files:', filesInfo); // Debugging line
+    //console.log('Fetched files:', filesInfo); // Debugging line
 
     // Populate both the popup and sidebar file lists
     populateFileLists(filesInfo);
@@ -552,22 +617,42 @@ async function applyUpdate(update) {
 function getRangeAndContent(update) {
     let row = update.row + 1;
     let content = update.content;
+    let action = update.action;
     let decorations = [];
     const model = codeEditor.getModel();
-    const currentLineLength = model.getLineContent(row).length;
-    
     let range;
-    if (update.action == "insert") {
-        console.log("in insert")
+
+    //checking if a empty line has been deleted
+    if(action == "delete row below"){
+        action = "delete";
+        row  = row + 1;
+    }
+
+    // Handle new line at the end of file
+    if (content.startsWith("\n") && action === "update" && row === model.getLineCount()){
+        range = new monaco.Range(
+            update.row + 1,  // Next line
+            1,              // Start at beginning of line
+            update.row + 1, // Same line
+            1               // End at beginning of line
+        );
+        content = ""; // Empty content for new line
+    } else if (action == "insert") {
         // For insert action, we need to create a range that represents a new line
+        if(content.replace(/\s/g, "") === ""){
+            content = content + "\n";
+        }
+        // so it wont go down 2 rows only 1
+        if (content == "\n"){
+            content = ""
+        }
         range = new monaco.Range(
             row,  // Convert 0-based to 1-based
             1,              // Start at beginning of line
             row,            // Same line
             1               // End at beginning of line (empty line)
         );
-    } else if (update.action == "delete"){
-        console.log("in delete")
+    } else if (action == "delete"){
         // For delete action when the whole line is being deleted
         range = new monaco.Range(
             row,  // Convert 0-based to 1-based
@@ -576,17 +661,16 @@ function getRangeAndContent(update) {
             1               // Start of next line
         );
         content = "";       // Empty content to remove the line
-    } else if (update.action == "update") {
+    } else if (action == "update") {
         // For update action (including deletions within the same row)
-        
         range = new monaco.Range(
             row,  // Convert 0-based to 1-based
             1,              // Start at beginning of line
             row,            // Same line
-            currentLineLength + 1  // End at end of current line
+            model.getLineContent(row).length + 1  // End at end of current line
         );
     } else { //change becuse the action is not the right one
-        console.log("action not acptebel.")
+        console.log("action not acceptable.")
     }
 
     // Add cursor line decoration only for update action
@@ -633,9 +717,8 @@ async function pollForUpdates() {
         else if (Array.isArray(data) && data.length > 0) {
             // Process all updates in order
             for (const update of data) {
-                console.log("Applying update with ModID:", update.ModID);
                 lastModID = update.ModID;
-                console.log("modification: " + JSON.stringify(update.modification, null, 2));
+                console.log("modification: " + JSON.stringify(update.modification));
                 await applyUpdate(update.modification);
             }
         }
@@ -696,96 +779,3 @@ async function sendToPollingServer(endpoint, method = 'GET', headers = {}, body 
 
 // end
 
-async function handlePaste(editor, startLineNumber, endLineNumber, changedText, lines, change) {
-    const modifiedLines = changedText.split('\n'); // Get the pasted lines
-
-    // Check if the paste starts in the middle of a line
-    const isFirstLineUpdate = change.range.startColumn > 1;
-    // Check if the paste ends in the middle of a line
-    const isLastLineUpdate = change.range.endColumn < lines[endLineNumber - 1].length + 1;
-    const lines2 = editor.getValue().split('\n');
-
-    // Process the first line
-    if (isFirstLineUpdate) {
-        // If the paste starts in the middle of a line, update the existing line
-        const content = lines2[startLineNumber - 1];
-        const modification = JSON.stringify({
-            content: content,          // First line of the pasted content
-            row: startLineNumber - 1,                       // Convert to 0-based index
-            action: 'update',                                // Update the existing line
-            lineLength: content.length                        // Total number of lines in the editor
-        });
-        // Log the modification for debugging
-        console.log('First Line Modification:', modification);
-
-        // Call saveInput with the modification
-        saveInput(modification);
-    } else {
-        const content = modifiedLines[0] || '\n';
-        // If the paste starts at the beginning of a line, treat it as an insert
-        const modification = JSON.stringify({
-            content: content,              // First line of the pasted content, or newline if empty
-            row: startLineNumber,                           // Convert to 0-based index
-            action: 'insert',                               // Insert new line
-            lineLength: content.length                       // Total number of lines in the editor
-        });
-        // Log the modification for debugging
-        console.log('Insert First Line Modification:', modification);
-
-        // Call saveInput with the modification
-        saveInput(modification);
-    }
-
-    // Remove the first line from modifiedLines since it's already processed
-    modifiedLines.shift();
-
-    // Process the middle lines (if any)
-    for (const line of modifiedLines.slice(0, -1)) {
-        const content = line || '\n';
-        const modification = JSON.stringify({
-            content: content,                          // The content of the line, or newline if empty
-            row: startLineNumber + modifiedLines.indexOf(line), // Convert to 0-based index
-            action: 'insert',                               // Insert new lines
-            lineLength: content.length                       // Total number of lines in the editor
-        });
-
-        // Log the modification for debugging
-        console.log('Middle Line Modification:', modification);
-
-        // Call saveInput with the modification
-        await saveInput(modification);
-    }
-
-    // Process the last line
-    if (isLastLineUpdate && modifiedLines.length > 0) {
-        console.log("lasts paste content: " + modifiedLines[modifiedLines.length - 1])
-        const content = modifiedLines[modifiedLines.length - 1] || '\n';
-        const modification = JSON.stringify({
-            content: content, // Last line of the pasted content, or newline if empty
-            row: startLineNumber + modifiedLines.length - 1,  // Convert to 0-based index
-            action: 'insert',                                 // Update the existing line
-            lineLength: content.length                         // Total number of lines in the editor
-        });
-
-        // Log the modification for debugging
-        console.log('Last Line Modification:', modification);
-
-        // Call saveInput with the modification
-        saveInput(modification);
-    } else if (modifiedLines.length > 0) {
-        // Insert the last line as a new line
-        const content = modifiedLines[modifiedLines.length - 1] || '\n';
-        const modification = JSON.stringify({
-            content: content, // Last line of the pasted content, or newline if empty
-            row: startLineNumber + modifiedLines.length - 1,  // Convert to 0-based index
-            action: 'insert',                                 // Insert a new line
-            lineLength: content.length                         // Total number of lines in the editor
-        });
-
-        // Log the modification for debugging
-        console.log('Last Line Modification:', modification);
-
-        // Call saveInput with the modification
-        saveInput(modification);
-    }
-}

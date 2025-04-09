@@ -18,7 +18,8 @@ class UserDatabase:
             CREATE TABLE IF NOT EXISTS users (
                 userID INTEGER UNIQUE PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL
+                password TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -55,7 +56,7 @@ class UserDatabase:
             # Insert the userID, username, and password
             cursor.execute('INSERT INTO users (userID, username, password) VALUES (?, ?, ?)', (userID, username, password))
             conn.commit()
-            return {'status': 201, 'message': 'User  created successfully with userID: {}'.format(userID)}
+            return {'status': 201, 'message': 'User created successfully with userID: {}'.format(userID)}
         except sqlite3.IntegrityError:
             return {'status': 409, 'message': 'Username already exists.'}
         except Exception as e:
@@ -95,6 +96,8 @@ class FileInfoDatabase:
                 fileID INTEGER UNIQUE PRIMARY KEY,
                 filename TEXT NOT NULL,
                 ownerID INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (ownerID) REFERENCES users(userID)
             )
         ''')
@@ -112,11 +115,24 @@ class FileInfoDatabase:
         cursor = conn.cursor()
         
         try:
-            cursor.execute('INSERT INTO fileInfo (name, ownerID) VALUES (?, ?)', (filename, ownerID))
+            cursor.execute('INSERT INTO fileInfo (filename, ownerID) VALUES (?, ?)', (filename, ownerID))
             conn.commit()
             return {'status': 201, 'message': 'File created successfully.'}
         except sqlite3.IntegrityError:
             return {'status': 409, 'message': 'File name already exists.'}
+        except Exception as e:
+            return {'status': 500, 'message': str(e)}
+        finally:
+            conn.close()
+
+    def update_file_timestamp(self, fileID):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('UPDATE fileInfo SET updated_at = CURRENT_TIMESTAMP WHERE fileID = ?', (fileID,))
+            conn.commit()
+            return {'status': 200, 'message': 'File timestamp updated successfully.'}
         except Exception as e:
             return {'status': 500, 'message': str(e)}
         finally:

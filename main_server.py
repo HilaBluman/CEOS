@@ -204,6 +204,7 @@ def modify_file(row, action, content, file_path):
     try:
         with open(file_path, 'r', encoding='utf-8', newline=None) as file:
             lines = file.readlines()  # Read all lines into a list
+            initialLen  = len(lines)
         
         # Add debug printing
         # print(f"File contents: {repr(lines)}")  # This will show exact contents including newlines
@@ -242,9 +243,17 @@ def modify_file(row, action, content, file_path):
         else:
             raise ValueError("Row number is out of bounds for modification.")
         
+        
+        
         with open(file_path, 'w', encoding='utf-8') as file:
             file.writelines(lines)
             print("was written in file")
+        #checking if a empty line has been deleted
+        with open(file_path, 'r', encoding='utf-8') as file:
+            currentLen = len(file.readlines())
+            if currentLen < initialLen:
+                    action = 'delete row below'
+            return action
 
     except FileNotFoundError as e:
         print(e)
@@ -324,17 +333,13 @@ def handle_client(client_socket, client_address, num_thread):
                     file_path = PATH_TO_FOLDER + "/uploads/" + file_name
                     modification_data = urllib.parse.unquote(match1.group(1)) # is this needed?
                     modification = json.loads(modification_data)
-
-                    if file_name and user_id:
-                        try:
-                            change_log_db.add_modification(file_id, modification, user_id)  # Log the change
-                        except Exception as e:
-                            print(f"Error logging change: {str(e)}")
                             
                     try:
                         print(f"trying: {modification['row']}, {modification['action']}, {modification['content']}, {file_path} ")
-                        modify_file(modification['row'], modification['action'], modification['content'], file_path)
+                        modification['action'] = modify_file(modification['row'], modification['action'], modification['content'], file_path)
                         msg = "File modified successfully."
+                        # Log the change only if successful
+                        change_log_db.add_modification(file_id, modification, user_id)  
                     except Exception as e:
                         msg = f"Error modifying file: {str(e)}"
                     print(msg)
