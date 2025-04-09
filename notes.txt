@@ -10,10 +10,10 @@ points for later:
     enter permissions for the users that can edit
 
 applyUpdate bugs:
-⚪️ hendle delete
-⚪️ hendle pasting - when pasting more then 1 line it replaces the lines below (one line good)
-⚪️ hendle a new row
-⚪️ hendle writing in the last row
+✔️ hendle delete - in teh same row
+⚪️ hendle pasting -(have a problam with saving paste) when pasting more then 1 line it replaces the lines below (one line good)
+✔️ hendle a new row
+✔️ hendle writing in the last row
 
 bugs:
 

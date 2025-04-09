@@ -200,7 +200,7 @@ def get_countent_len(client_socket, headers_data):
     return match.group(1)
 
 
-def modify_file(row, action, content, file_path, lines_length_of_countent):
+def modify_file(row, action, content, file_path):
     try:
         with open(file_path, 'r', encoding='utf-8', newline=None) as file:
             lines = file.readlines()  # Read all lines into a list
@@ -333,7 +333,7 @@ def handle_client(client_socket, client_address, num_thread):
                             
                     try:
                         print(f"trying: {modification['row']}, {modification['action']}, {modification['content']}, {file_path} ")
-                        modify_file(modification['row'], modification['action'], modification['content'], file_path, modification['linesLength'])
+                        modify_file(modification['row'], modification['action'], modification['content'], file_path)
                         msg = "File modified successfully."
                     except Exception as e:
                         msg = f"Error modifying file: {str(e)}"
