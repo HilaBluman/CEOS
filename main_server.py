@@ -5,6 +5,7 @@ import re
 import subprocess
 import threading
 import urllib.parse
+import fcntl
 from difflib import SequenceMatcher
 from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase
 # Create an instance at the start of your server
@@ -202,58 +203,57 @@ def get_countent_len(client_socket, headers_data):
 
 def modify_file(row, action, content, file_path):
     try:
-        with open(file_path, 'r', encoding='utf-8', newline=None) as file:
+        with open(file_path, 'r+', encoding='utf-8', newline=None) as file:
+            # Lock the file for writing
+            fcntl.flock(file, fcntl.LOCK_EX)
+
             lines = file.readlines()  # Read all lines into a list
-            initialLen  = len(lines)
-        
-        # Add debug printing
-        # print(f"File contents: {repr(lines)}")  # This will show exact contents including newlines
-        # print(f"Number of lines: {len(lines)}")
-        # print(f"Line lengths: {[len(line) for line in lines]}")
 
-        if action == 'saveAll':
-            lines.clear()
-            lines = content
+            # Checking if an empty line has been deleted
+            if action == 'delete same line':
+                if content == lines[row].replace("\n",""):
+                    action = 'delete row below'
+                else:
+                    action = 'update'
 
-        elif action == 'delete':
-            print(f"Attempting to delete row: {row} from {len(lines)} ")
-            if 0 <= row < len(lines):    # and new_lines_length < len(lines):  
-                del lines[row]
-            else:
-                raise ValueError("Row number is out of bounds.")
-            
-        elif action == "insert" or action == "paste":
-            print(f"Attempting to insert: {row}")
-            if row > len(lines):
-                print(f"at end of file: {row}")
-                lines.insert(row, content +"\n\r" ) 
-            else:
-                print("enter in mid of line ")
-                lines.insert(row, content + "\r")         
+            if action == 'saveAll':
+                lines.clear()
+                lines = content
 
-            
-        elif action == 'update':
-            if row == len(lines):
-                lines.insert(row, content) 
-            elif 0 <= row < len(lines): 
-                print(f"Attempting to update line : {row}")
-                lines[row] = content + "\r"
+            elif action == 'delete':
+                print(f"Attempting to delete row: {row} from {len(lines)} ")
+                if 0 <= row < len(lines):
+                    del lines[row]
+                else:
+                    raise ValueError("Row number is out of bounds.")
+
+            elif action == "insert" or action == "paste":
+                print(f"Attempting to insert: {row}")
+                if row >= len(lines):
+                    print(f"at end of file: {row}")
+                    lines.insert(row, content )
+                else:
+                    print("enter in mid of line ")
+                    lines.insert(row, content + "\r")
+
+            elif action == 'update' or action == 'delete row below':
+                if row == len(lines):
+                    lines.insert(row, content)
+                elif 0 <= row < len(lines):
+                    print(f"Attempting to update line : {row}")
+                    lines[row] = content + "\r"
+                else:
+                    raise ValueError("Row number is out of bounds.")
             else:
-                raise ValueError("Row number is out of bounds.")
-        else:
-            raise ValueError("Row number is out of bounds for modification.")
-        
-        
-        
-        with open(file_path, 'w', encoding='utf-8') as file:
+                raise ValueError("Invalid action.")
+
+            # Move the file pointer to the beginning of the file
+            file.seek(0)
+            file.truncate()  # Clear the file before writing new content
             file.writelines(lines)
             print("was written in file")
-        #checking if a empty line has been deleted
-        with open(file_path, 'r', encoding='utf-8') as file:
-            currentLen = len(file.readlines())
-            if currentLen < initialLen:
-                    action = 'delete row below'
             return action
+
 
     except FileNotFoundError as e:
         print(e)
@@ -261,8 +261,7 @@ def modify_file(row, action, content, file_path):
     except Exception as e:
         print(e)
         raise ValueError(f"An error occurred: {e}")
-
-
+    
 def handle_client(client_socket, client_address, num_thread):
     PATH_TO_FOLDER = r"/Users/hila/CEOs"  # for windows change to C:\webroot\ for mac /Users/hila/webroot
     FORBIDDEN = {PATH_TO_FOLDER + r"/status_code/404.png", PATH_TO_FOLDER + r"/status_code/life.txt",

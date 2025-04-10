@@ -72,6 +72,7 @@ let timeoutId;
 let isPasting = false;
 let isHighlighted = false;
 let isLoaded = false;
+let isDelete = false;
 let highlightedTxt = {start: -1, end: -1, selectedText: ""}
 
 let fileID = 0;     // changes after pciking a file
@@ -91,8 +92,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 document.addEventListener('mousemove', onDocumentMouseMove);
-document.addEventListener('mouseup', onDocumentMouseUp);    
+document.addEventListener('mouseup', onDocumentMouseUp);   
 document.addEventListener('keydown', onDocumentKeySave);
+
 document.addEventListener('selectionchange', isTextHighlighted);
 window.addEventListener("pagehide", pageHide);
 
@@ -127,11 +129,12 @@ useCodeEditor((editor) => {
                     isHighlighted = false;
                     DeleteHighlighted(startLineNumber -1, endLineNumber - 1)
                 }
+                // delete in the same line  
                 const content = lines[startLineNumber - 1];
                 const modification = JSON.stringify({
                     content: content,                      // The content of the first line
                     row: startLineNumber - 1,               // Convert to 0-based index
-                    action: 'update',                       // Action type (update)
+                    action: 'delete same line',                       // Action type (update)
                     lineLength: content.length               // Total number of lines in the editor
                 });
                 saveInput(modification);
@@ -624,7 +627,7 @@ function getRangeAndContent(update) {
 
     //checking if a empty line has been deleted
     if(action == "delete row below"){
-        action = "delete";
+       action = "delete";
         row  = row + 1;
     }
 
@@ -639,13 +642,11 @@ function getRangeAndContent(update) {
         content = ""; // Empty content for new line
     } else if (action == "insert") {
         // For insert action, we need to create a range that represents a new line
-        if(content.replace(/\s/g, "") === ""){
+        // saves the spaces is there is.
+        if(content.replace(/ /g, "") === ""){
             content = content + "\n";
         }
-        // so it wont go down 2 rows only 1
-        if (content == "\n"){
-            content = ""
-        }
+       
         range = new monaco.Range(
             row,  // Convert 0-based to 1-based
             1,              // Start at beginning of line
