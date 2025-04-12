@@ -13,10 +13,16 @@ background: #1a1b26;
 color: #a9b1d6;
 }
 
+.main { /* is responseble for the complitions to not show, dont know why (it is an importent css because it sets the main contemor)*/
+  padding: 1rem;
+  margin-top: 50px;
+}
+
 #editor-container {
 position: relative;
+border-top: 1px solid #404556;
 height: 800px; /* Increased height */
-width: 100%; /* Full width */
+width: 1000px; /* Full width */
 }
 
 .resizer {
@@ -83,10 +89,6 @@ width: 100%; /* Full width */
   margin-top: 50px;
 }
 
-.main {
-  padding: 1rem;
-  margin-top: 50px;
-}
 
 .chat {
   background: var(--primary);

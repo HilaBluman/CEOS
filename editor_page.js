@@ -6,47 +6,49 @@ const main_url = 'http://'+ host +':8000'
 require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' }});
 async function initializeEditor() {
     await new Promise((resolve) => {
-        require(['vs/editor/editor.main'], function() {
-            codeEditor = monaco.editor.create(document.getElementById('editor-container'), {
-                value: "",
-                language: 'python',
-                theme: 'vs-dark',
-                automaticLayout: true
-            });
+        require(['vs/editor/editor.main'], async function () {
+    
+        // ✅ JS compiler setup
+        monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+            target: monaco.languages.typescript.ScriptTarget.ES2020,
+            allowNonTsExtensions: true,
+            checkJs: true,
+            noEmit: true,
+            strict: true
+        });
 
-            // Set the flag to true when the editor is ready
-            isEditorReady = true;
+        // 🧠 Create editor after Pyright
+        codeEditor = monaco.editor.create(document.getElementById('editor-container'), {
+            value: '// Start typing...\n',
+            language: 'javascript',
+            theme: 'vs-dark',
+            automaticLayout: true,
+            suggestOnTriggerCharacters: true
+        });
 
-            // Register completion provider
-            monaco.languages.registerCompletionItemProvider('javascript', {
-                provideCompletionItems: () => {
-                    return {
-                        suggestions: [
-                            {
-                                label: 'console',
-                                kind: monaco.languages.CompletionItemKind.Function,
-                                insertText: 'console.',
-                                detail: 'Console object',
-                            },
-                            {
-                                label: 'log',
-                                kind: monaco.languages.CompletionItemKind.Method,
-                                insertText: 'log',
-                                detail: 'Log to console',
-                            },
-                            // Add more suggestions as needed
-                        ]
-                    };
-                }
-            });
+            // Add Python completion items
+        monaco.languages.registerCompletionItemProvider('python', {
+            provideCompletionItems: () => {
+            const suggestions = [
+                { label: 'print', kind: monaco.languages.CompletionItemKind.Function, insertText: 'print($1)', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                { label: 'len', kind: monaco.languages.CompletionItemKind.Function, insertText: 'len($1)' },
+                { label: 'range', kind: monaco.languages.CompletionItemKind.Function, insertText: 'range($1)' },
+                { label: 'int', kind: monaco.languages.CompletionItemKind.Function, insertText: 'int($1)' },
+                { label: 'str', kind: monaco.languages.CompletionItemKind.Function, insertText: 'str($1)' },
+            ];
+            return { suggestions };
+            }
+        });
 
-            // Optionally, trigger a custom event
-            const event = new Event('editorReady');
-            window.dispatchEvent(event);
-            resolve(); // Resolve the promise when the editor is ready
+        isEditorReady = true;
+
+        const event = new Event('editorReady');
+        window.dispatchEvent(event);
+        resolve();
         });
     });
 }
+
 
 
 // Function to use codeEditor safely
@@ -74,6 +76,7 @@ let isHighlighted = false;
 let isLoaded = false;
 let isDelete = false;
 let highlightedTxt = {start: -1, end: -1, selectedText: ""}
+let pollingInterval;
 
 let fileID = 0;     // changes after pciking a file
 let userID = 0;
@@ -85,9 +88,36 @@ let lastModID = -1;
 const DEBOUNCE_DELAY = 500; // ms
 const MIN_WIDTH = 80;
 const MAX_WIDTH = window.innerWidth * 0.8;
-let pollingInterval;
+const languageMap = {
+    'py': 'python',
+    'js': 'javascript',
+    'ts': 'typescript',
+    'html': 'html',
+    'css': 'css',
+    'json': 'json',
+    'java': 'java',
+    'c': 'c',
+    'cpp': 'cpp',
+    'cs': 'csharp',
+    'go': 'go',
+    'php': 'php',
+    'r': 'r',
+    'rb': 'ruby',
+    'sh': 'shell',
+    'sql': 'sql',
+    'xml': 'xml',
+    'yaml': 'yaml',
+    'md': 'markdown',
+    'swift': 'swift',
+    'dockerfile': 'dockerfile',
+    'ini': 'ini',
+    'plaintext': 'plaintext',
+    'bat': 'bat',
+    'powershell': 'powershell'
+};
 
 document.addEventListener('DOMContentLoaded', async () => {
+    await initializeEditor();
     await loadInitialFile();
 });
 
@@ -185,7 +215,8 @@ function isTextHighlighted() {
     isHighlighted = selection.startLineNumber !== selection.endLineNumber; // Returns true if text is highlighted
 }
 
-function changeEditorLanguage(newLanguage) {
+function changeEditorLanguage(extension) {    
+    const newLanguage = languageMap[extension.toLowerCase()] || 'plaintext';
     const model = codeEditor.getModel();
     if (model) {
         monaco.editor.setModelLanguage(model, newLanguage);
@@ -320,7 +351,7 @@ async function loadContent(fileId) {
             console.log("lastModID: " + lastModID);
             codeEditor.setValue(data.fullContent);
         }
-        startPolling();
+        //startPolling();
     } catch (error) {
         console.error('Error loading initial content:', error);
     }
@@ -424,6 +455,8 @@ function selectFile(fileId, filename) {
     if (filename) {
         tab.classList.remove('inactive-tab');
         tab.classList.add('active-tab');
+        const extension = filename.split('.').pop()
+        changeEditorLanguage(extension);
     } else {
         tab.classList.remove('active-tab');
         tab.classList.add('inactive-tab');
@@ -458,8 +491,7 @@ async function GetUserFiles(userId) {
     }
 }
 
-async function loadInitialFile() {
-    await initializeEditor(); // Ensure the editor is initialized before loading content
+async function loadInitialFile() { 
     username = await get_username(); // Ensure this is awaited if it's a promise
     userID = await get_userID(); // Ensure this is awaited if it's a promise
 
@@ -779,4 +811,3 @@ async function sendToPollingServer(endpoint, method = 'GET', headers = {}, body 
 // const result = await sendToPollingServer('/some-endpoint', 'POST', { 'custom-header': 'value' }, { data: 'some data' });
 
 // end
-
