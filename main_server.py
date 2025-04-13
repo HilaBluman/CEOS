@@ -73,6 +73,9 @@ def find_file_type(request):
         file_type = "text/html"
     elif r"/js" in request:
         file_type = "text/js"
+    elif r"/imgs" in request:
+        index_dot = request.find(".") + 1
+        file_type = "image/" + request[index_dot:index_dot + 3]
     else:
         index_dot = request.find(".") + 1
         file_type = "text/" + request[index_dot:index_dot + 3] 
@@ -374,15 +377,40 @@ def handle_client(client_socket, client_address, num_thread):
                         error_response = json.dumps({'error': str(e)})
                         response = ready_to_send("500 Internal Server Error", error_response, "application/json")
                         client_socket.send(response.encode())
-
-                elif "/run" in headers_data:
-                    print("------------------")
-                    print("in run")
-                    filename = get_filename(client_socket, headers_data)
-                    if not os.path.exists(f"{PATH_TO_FOLDER}/uploads/{filename}"):
-                        client_socket.send(ready_to_send("404 Not Found", f"{filename} does not exist in uploads",
-                                                         "text/plain").encode())
-                    run_file(client_socket, filename, PATH_TO_FOLDER)
+                
+                elif "/new-file" in headers_data:
+                    user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)')
+                    filename = get_header(client_socket, headers_data, r'filename:\s*(\S+)')
+                    
+                    # Check if filename already exists for this user
+                    existing_file = file_db.check_file_exists(user_id, filename)
+                    
+                    if existing_file:
+                        # File already exists, send error response
+                        data = json.dumps({
+                            "error": "File already exists",
+                            "fileId": existing_file
+                        })
+                        response  = ready_to_send("200", data, "application/json")
+                        client_socket.send(response.encode())
+                    else:
+                        # Create new file
+                        result = file_db.add_file(filename, user_id)
+                        
+                        if result['status'] == 201:
+                            # Get the file ID of the newly created file
+                            file_id = file_db.check_file_exists(user_id, filename)
+                            data = json.dumps({
+                                "success": "File created successfully",
+                                "fileId": file_id
+                        })
+                            # Send success response
+                            response = ready_to_send(result['status'], data, "application/json")
+                            client_socket.send(response.encode())
+                        else:
+                            # Send error response
+                            response = ready_to_send(result['status'], result['message'], "application/json")
+                            client_socket.send(response.encode())
 
                 elif "/load" in headers_data:
                     try:
@@ -447,6 +475,15 @@ def handle_client(client_socket, client_address, num_thread):
 
                     elif not file_exist(PATH_TO_FOLDER + request):
                         handle_404(client_socket)
+
+                    elif file_type.startswith("image/"):
+                        if file_type == "image/ico":
+                            file_type = "image/icon"
+                        with open(PATH_TO_FOLDER + request, "rb") as file2:
+                            code = file2.read()
+                            status = "200 OK"
+                            response = ready_to_send(status, code, file_type)
+                            client_socket.send(response.encode() + code)
 
                     else:
                         with open(PATH_TO_FOLDER + request, "r") as file2:

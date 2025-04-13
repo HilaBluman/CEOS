@@ -13,16 +13,14 @@ background: #1a1b26;
 color: #a9b1d6;
 }
 
-.main { /* is responseble for the complitions to not show, dont know why (it is an importent css because it sets the main contemor)*/
-  padding: 1rem;
-  margin-top: 50px;
+.main { 
+  border-top: 1px solid #404556;
 }
 
 #editor-container {
 position: relative;
-border-top: 1px solid #404556;
 height: 800px; /* Increased height */
-width: 1000px; /* Full width */
+width: 100%; /* Full width */
 }
 
 .resizer {
@@ -173,8 +171,8 @@ button:hover {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.75rem;
+  margin-bottom: 0.55rem;
+  padding-bottom: 0.65rem;
   border-bottom: 1px solid #404556;
   font-size: 0.85em;
 }
@@ -292,9 +290,9 @@ button:hover {
 }
 
 .editor-tabs {
+    margin-top: 50px;  
     background: #1e1e1e;
     padding: 0.15rem 0.5rem;
-    border-bottom: 1px solid #404556;
     display: flex;
     align-items: center;
     height: 35px;
@@ -303,21 +301,11 @@ button:hover {
 .active-tab {
     background: #A970FF;
     padding: 0.15rem 0.5rem;
-    border-radius: 2px;
+    border-radius: 5px;
     color: #140d0d;
     display: flex;
     align-items: center;
     gap: 0.25rem;
     font-size: 0.85em;
+    margin-left: 20px;
 }
-
-.inactive-tab {
-    background: #1e1e1e;;
-    padding: 0.15rem 0.5rem;
-    border-radius: 2px;
-    color: #1e1e1e;
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    font-size: 0.85em;
-} 

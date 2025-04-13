@@ -17,7 +17,7 @@ async function initializeEditor() {
             strict: true
         });
 
-        // 🧠 Create editor after Pyright
+        // 🧠 Create editor 
         codeEditor = monaco.editor.create(document.getElementById('editor-container'), {
             value: '// Start typing...\n',
             language: 'javascript',
@@ -351,7 +351,7 @@ async function loadContent(fileId) {
             console.log("lastModID: " + lastModID);
             codeEditor.setValue(data.fullContent);
         }
-        //startPolling();
+        startPolling();
     } catch (error) {
         console.error('Error loading initial content:', error);
     }
@@ -453,14 +453,10 @@ function selectFile(fileId, filename) {
     tab.textContent = filename || '';
     
     if (filename) {
-        tab.classList.remove('inactive-tab');
         tab.classList.add('active-tab');
         const extension = filename.split('.').pop()
         changeEditorLanguage(extension);
-    } else {
-        tab.classList.remove('active-tab');
-        tab.classList.add('inactive-tab');
-    }
+    } 
 }
 
 
@@ -559,14 +555,57 @@ function populateFileLists(filesInfo) {
     }
 }
 
-function newFile() {
-    const fileName = prompt("Enter new file name:");
-    if (fileName) {
-        const fileTree = document.querySelector('.file-tree');
-        const newFileItem = document.createElement('li');
-        newFileItem.innerHTML = `📄 ${fileName}`;
-        fileTree.appendChild(newFileItem);
-        codeEditor.setValue('// New file');
+async function newFile() {
+    const filename = prompt("Enter new file name:");
+    if (filename) {
+        try {
+            const response = await fetch('/new-file', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'userId': userID,
+                    'filename': filename
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.status === 409) {
+                // File already exists
+                alert('A file with this name already exists. Please choose a different name.');
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            
+            // Update the file tree
+            const fileTree = document.querySelector('.file-tree');
+            const newFileItem = document.createElement('li');
+            newFileItem.innerHTML = `📄 ${filename}`;
+            newFileItem.setAttribute('data-file-id', data.fileId);
+            fileTree.appendChild(newFileItem);
+
+            // Update the editor
+            codeEditor.setValue('// New file');
+            
+            // Update the current file tab
+            const currentFileTab = document.getElementById('current-file-tab');
+            currentFileTab.textContent = filename;
+            currentFileTab.classList.add('active-tab');
+
+            // Set the current file ID
+            fileID = data.fileId;
+
+            // Close the file popup if it's open
+            closeFilePopup();
+
+        } catch (error) {
+            console.error('Error creating new file:', error);
+            alert('Failed to create new file. Please try again.');
+        }
     }
 }
 

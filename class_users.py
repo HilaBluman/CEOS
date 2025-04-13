@@ -110,6 +110,27 @@ class FileInfoDatabase:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def check_file_exists(self, ownerID, filename):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                SELECT fileID FROM fileInfo 
+                WHERE ownerID = ? AND filename = ?
+            ''', (ownerID, filename))
+            
+            result = cursor.fetchone()
+            if result:
+                return result['fileID']  # Return the fileID if file exists
+            return None  # Return None if file doesn't exist
+                
+        except Exception as e:
+            print(f"Error checking file existence: {str(e)}")
+            return None
+        finally:
+            conn.close()
+
     def add_file(self, filename, ownerID):
         conn = self.get_db_connection()
         cursor = conn.cursor()
