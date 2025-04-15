@@ -1,7 +1,6 @@
 create:
 * what is async??? (read about it)
 * allow the creater of the file to allow users to access file
-* creating a new file - did this, check this for bugs
 * add the user name next to the curser of the person that is editing the file (maybe use different colors foe each person) - see whatsupp
 * add an option to see the changes that happend from the a spacific time and date (using the changes to go back? than use LSC to show the changes) - see whatsupp
 * maybe add verstions - see whatsupp (save every 20 modiftions or 1 day if less modiftions) (if no modftions for a long time it wont save an till there i modiftion)
@@ -25,6 +24,7 @@ bugs:
 
 
 done:
+✔️ creating a new file
 ✔️ sends the same content from data base to more than 1 time - check lock on db && lock file when writing in to it
 ✔️ the code editor does not show the options of completion to the word - the problam was in the css because i used (margin-top: 50px) it affected the options in the tab of completion options. i fixed it by moving the (margin-top: 50px) to the tab css 
 ✔️ the list of the files the user can acces on the side

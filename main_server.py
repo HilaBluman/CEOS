@@ -83,31 +83,30 @@ def find_file_type(request):
     return request, file_type
 
 
-def upload_file(client_socket, headers_data, PATH_TO_FOLDER, content_length):
-    # Extract filename
-    filename = get_filename(client_socket, headers_data)
-    if filename == "no file":
-        filename = "unnamed_file"
-    print(f"File name is: {filename}\nLength: {content_length}")
-    client_socket.send(ready_to_send("200 OK", "Ready to receive file", "text/plain").encode())
-
+def get_content_of_upload(client_socket, content_length):
     # Receive and write file data
     bytes_received = 0
-    with open(PATH_TO_FOLDER + "/uploads/" + filename, 'wb') as file:
+    content = b""
+    try:
         while bytes_received < content_length:
             chunk_size = min(1024, content_length - bytes_received)
             data = client_socket.recv(chunk_size)
             if not data:
                 break
-            file.write(data)
+            content += data
             bytes_received += len(data)
 
-    if bytes_received == content_length:
-        msg = "File received successfully."
-    else:
-        msg = f"File upload incomplete. Received {bytes_received} of {content_length} bytes."
-    print(msg)
-    client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
+        if bytes_received == content_length:
+            msg = "File received successfully."
+            print(msg)
+            return content.decode()  # Decode the bytes to string before returning
+        else:
+            msg = f"File upload incomplete. Received {bytes_received} of {content_length} bytes."
+            print(msg)
+            return None
+    except (BrokenPipeError, ConnectionResetError) as e:
+        print(f"Connection error during file upload: {str(e)}")
+        return None
 
 
 def receive_headers(client_socket):
@@ -134,52 +133,53 @@ def receive_headers(client_socket):
         client_socket.settimeout(None)
     return action, headers.decode()
 
-
-def run_file(client_socket, file, PATH_TO_FOLDER):
-    print(f"\n\rRunning file: {file}\n\r")
-    if file == "no file":
+def new_file(client_socket, PATH_TO_FOLDER, headers_data, value = ""):
+    user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)')
+    if not user_id:
         return
-        
-    # Check file extension
-    if not file.endswith('.py'):
-        response_data = json.dumps({'output': 'Error: Only Python files can be executed'})
-        response = ready_to_send("400 Bad Request", response_data, "application/json")
-        client_socket.send(response.encode() + response_data.encode('utf-8'))
+    filename = get_header(client_socket, headers_data, r'filename:\s*(\S+)')
+    if not filename:
         return
-        
-    file_path = f"{PATH_TO_FOLDER}/uploads/{file}"
-    print("file_path: "  + file_path )
-    working_dir = f"{PATH_TO_FOLDER}/uploads"
     
-    try:
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File {file} not found")
-            
-        # Run the Python file and capture both stdout and stderr
-        process = subprocess.Popen(
-            ['python', file],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=working_dir)
-        try:
-            output, error = process.communicate(timeout=5)
-            if error:
-                result = error
-            else:
-                result = output if output else "Program executed successfully with no output."
-        except subprocess.TimeoutExpired:
-            process.kill()
-            result = "Execution timed out after 5 seconds."
-            
-    except FileNotFoundError as e:
-        result = str(e)
-    except Exception as e:
-        result = f"Error executing file: {str(e)}"
+    # Check if filename already exists for this user
+    existing_file = file_db.check_file_exists(user_id, filename)
+    if existing_file:
+        # File already exists, send error response
+        data = json.dumps({
+            "error": "File already exists",
+            "fileId": 0
+        })
+        print("File already exists")
+        response = ready_to_send("200", data, "application/json")
+        
+    else:
+        # Create new file
+        result = file_db.add_file(filename, user_id)
+        
+        if result['status'] == 201:
+            lines = [""]
+            if value:
+                lines = value.split("/n")
+            with open(PATH_TO_FOLDER + "/uploads/"+ filename, 'w') as file:
+                file.writelines(lines)  # Create file
+            print(f"File {filename} created in path.")
+            # Get the file ID of the newly created file
+            file_id = file_db.check_file_exists(user_id, filename)
+            file_permissions_db.grant_access(file_id, user_id)
 
-    response_data = json.dumps({'output': result})
-    response = ready_to_send("200 OK", response_data, "application/json")
-    client_socket.send(response.encode() + response_data.encode('utf-8'))
+            data = json.dumps({
+                "success": "File created successfully",
+                "fileId": file_id
+            })
+            # Send success response
+            print("File created successfully")
+            response = ready_to_send(result['status'], data, "application/json")
+        else:
+            # Send error response
+            print("error: " + result['message'])
+            response = ready_to_send(result['status'], result['message'], "application/json")
+        client_socket.send(response.encode())
+
 
 def get_header(client_socket, headers_data, header=r'filename:\s*(\S+)'):
     header_match = re.search(header, headers_data)
@@ -287,7 +287,7 @@ def handle_client(client_socket, client_address, num_thread):
 
             if not "/poll-updates" in headers_data:
                     print("_________________________")
-                    print(f"Client {client_address} wants to: '{action}'")
+                    #print(f"Client {client_address} wants to: '{action}'")
 
             if action == "GET ":
                 end = headers_data.find(r"HTTP") - 1
@@ -320,8 +320,8 @@ def handle_client(client_socket, client_address, num_thread):
                             return
 
                 elif "/save" in headers_data:
-                    print("------------------")
                     print("in save")
+                    #check if file exist in path and if he is in the db - not exist but in db create one.
                     decoded_request = urllib.parse.unquote(request)
                     match1 = re.search(r'/save\?modification=([^&]+)', decoded_request)
                     if not match1:
@@ -331,21 +331,30 @@ def handle_client(client_socket, client_address, num_thread):
                     file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
                     file_name = file_db.get_filename_by_id(file_id)['filename']
                     user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
-                    
                     file_path = PATH_TO_FOLDER + "/uploads/" + file_name
-                    modification_data = urllib.parse.unquote(match1.group(1)) # is this needed?
-                    modification = json.loads(modification_data)
-                            
-                    try:
-                        print(f"trying: {modification['row']}, {modification['action']}, {modification['content']}, {file_path} ")
-                        modification['action'] = modify_file(modification['row'], modification['action'], modification['content'], file_path)
-                        msg = "File modified successfully."
-                        # Log the change only if successful
-                        change_log_db.add_modification(file_id, modification, user_id)  
-                    except Exception as e:
-                        msg = f"Error modifying file: {str(e)}"
-                    print(msg)
-                    client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
+
+                    if not os.path.exists(file_path) and file_name == "File not found" :
+                        print(f"File {file_id} does not exist in the database or path.")
+                        client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
+                    else:
+                        if not file_name == "File not found":
+                            # If the file exists in the database but not in the path, create it
+                            with open(file_path, 'w') as file:
+                                file.write("")  # Create an empty file
+                            print(f"File {file_name} created in path.")
+                        modification_data = urllib.parse.unquote(match1.group(1)) 
+                        modification = json.loads(modification_data)
+                                
+                        try:
+                            print(f"trying: {modification['row']}, {modification['action']}, {modification['content']}, {file_path} ")
+                            modification['action'] = modify_file(modification['row'], modification['action'], modification['content'], file_path)
+                            msg = "File modified successfully."
+                            # Log the change only if successful
+                            change_log_db.add_modification(file_id, modification, user_id)  
+                        except Exception as e:
+                            msg = f"Error modifying file: {str(e)}"
+                        print(msg)
+                        client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
 
                 elif "/get-user-files" in headers_data:
                     try:
@@ -379,42 +388,14 @@ def handle_client(client_socket, client_address, num_thread):
                         client_socket.send(response.encode())
                 
                 elif "/new-file" in headers_data:
+                    print("New file")
                     user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)')
                     filename = get_header(client_socket, headers_data, r'filename:\s*(\S+)')
-                    
-                    # Check if filename already exists for this user
-                    existing_file = file_db.check_file_exists(user_id, filename)
-                    
-                    if existing_file:
-                        # File already exists, send error response
-                        data = json.dumps({
-                            "error": "File already exists",
-                            "fileId": existing_file
-                        })
-                        response  = ready_to_send("200", data, "application/json")
-                        client_socket.send(response.encode())
-                    else:
-                        # Create new file
-                        result = file_db.add_file(filename, user_id)
-                        
-                        if result['status'] == 201:
-                            # Get the file ID of the newly created file
-                            file_id = file_db.check_file_exists(user_id, filename)
-                            data = json.dumps({
-                                "success": "File created successfully",
-                                "fileId": file_id
-                        })
-                            # Send success response
-                            response = ready_to_send(result['status'], data, "application/json")
-                            client_socket.send(response.encode())
-                        else:
-                            # Send error response
-                            response = ready_to_send(result['status'], result['message'], "application/json")
-                            client_socket.send(response.encode())
+                    response = new_file(client_socket, PATH_TO_FOLDER, headers_data)
 
                 elif "/load" in headers_data:
                     try:
-                        print("in load")
+                        print("Load")
                         fileId = get_header(client_socket, headers_data, r'fileId:\s*(\S+)')
                         file_status_and_name = file_db.get_filename_by_id(fileId)
                         filename = file_status_and_name['filename']
@@ -450,7 +431,7 @@ def handle_client(client_socket, client_address, num_thread):
                         response = ready_to_send("500 Internal Server Error", error_response, "application/json")
                         client_socket.send(response.encode() + error_response.encode('utf-8'))
 
-                elif "imgs" in request or request == "//":  # for windows change to // for mac //
+                elif "imgs/" in request or request == "//":  # for windows change to // for mac //
 
                     if file_forbidden(PATH_TO_FOLDER + request, FORBIDDEN):
                         handle_403(client_socket)
@@ -460,6 +441,7 @@ def handle_client(client_socket, client_address, num_thread):
 
                     else:
                         request, file_type = find_file_type(request)
+                        print("Geting a file - " + request)
 
                         with open(PATH_TO_FOLDER + request, "rb") as file3:
                             status = "200 OK"
@@ -469,22 +451,14 @@ def handle_client(client_socket, client_address, num_thread):
 
                 elif "." in request or "/" == request:  # is the last option/elif
                     request, file_type = find_file_type(request)
+                    print("Geting a file - " + request)
 
                     if file_forbidden(PATH_TO_FOLDER + request, FORBIDDEN):
                         handle_403(client_socket)
 
                     elif not file_exist(PATH_TO_FOLDER + request):
                         handle_404(client_socket)
-
-                    elif file_type.startswith("image/"):
-                        if file_type == "image/ico":
-                            file_type = "image/icon"
-                        with open(PATH_TO_FOLDER + request, "rb") as file2:
-                            code = file2.read()
-                            status = "200 OK"
-                            response = ready_to_send(status, code, file_type)
-                            client_socket.send(response.encode() + code)
-
+                    
                     else:
                         with open(PATH_TO_FOLDER + request, "r") as file2:
                             code = file2.read()
@@ -492,6 +466,7 @@ def handle_client(client_socket, client_address, num_thread):
                             response = ready_to_send(status, code, file_type)
                             response += code
                             client_socket.send(response.encode())
+                    
 
                 else:
                     print("500")
@@ -528,11 +503,15 @@ def handle_client(client_socket, client_address, num_thread):
                             body = client_socket.recv(content_length).decode()
                         return  # Exit the function
 
-                    elif "/upload" in headers_data: 
+                    elif "/upload-file" in headers_data: 
                         print("------------------")
                         print("in uploads")
-                        upload_file(client_socket, headers_data, PATH_TO_FOLDER, content_length)
-
+                        content = get_content_of_upload(client_socket, content_length)
+                        print("after content")
+                        if content:
+                            new_file(client_socket, PATH_TO_FOLDER, headers_data,content)
+                        else:
+                            client_socket.send(ready_to_send("400 Bad Request", "Broken pipe or No content"))
                     else:
                         print("Not valid action")
                         raise ValueError("Not valid action")

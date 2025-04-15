@@ -233,9 +233,6 @@ async function DeleteHighlighted(start, fin ) {
     codeEditor.focus();
 }
 
-
-    
-
 // Helper Functions
 function pageHide(event){
     console.log("in pageHide")
@@ -264,18 +261,6 @@ function onKeyZ(event){
     }
 }
 
-function onNewFileButtonClick() {
-    let newFileName = prompt('Enter file name:', 'untitled.py');
-
-    if (newFileName) {
-        if (!newFileName.includes('.')) {
-            newFileName += '.py';
-        }
-
-        fileNameDisplay.textContent = newFileName;
-        codeEditor.setValue('');
-    }
-}
 
 function onDocumentMouseMove(e) {
     if (!isResizing) return;
@@ -555,9 +540,8 @@ function populateFileLists(filesInfo) {
     }
 }
 
-async function newFile() {
-    const filename = prompt("Enter new file name:");
-    if (filename) {
+
+async function createNewFile(filename) {
         try {
             const response = await fetch('/new-file', {
                 method: 'GET',
@@ -580,7 +564,11 @@ async function newFile() {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            
+            // Set the current file ID
+            if (data.fileId !== 0) {
+                fileID = data.fileId;
+            }
+
             // Update the file tree
             const fileTree = document.querySelector('.file-tree');
             const newFileItem = document.createElement('li');
@@ -596,18 +584,52 @@ async function newFile() {
             currentFileTab.textContent = filename;
             currentFileTab.classList.add('active-tab');
 
-            // Set the current file ID
-            fileID = data.fileId;
-
             // Close the file popup if it's open
             closeFilePopup();
+
+            // Load the new file content
+            await loadContent(data.fileId);
 
         } catch (error) {
             console.error('Error creating new file:', error);
             alert('Failed to create new file. Please try again.');
         }
+}
+
+async function uploadNewFile(fileContent, filename) {
+    try {
+        const response = await fetch('/upload-file', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain',
+                'filename': filename,
+                'userId': userID
+            },
+            body: fileContent
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('File uploaded successfully:', result);
+
+        const fileTree = document.querySelector('.file-tree');
+        const newFileItem = document.createElement('li');
+        newFileItem.innerHTML = `📄 ${filename}`;
+        newFileItem.setAttribute('data-file-id', result.fileId);
+        fileTree.appendChild(newFileItem);
+
+        selectFile(result.fileId, filename);
+        await loadContent(result.fileId);
+    } catch (error) {
+        console.error('Error uploading file:', error);
+        throw error;
     }
 }
+
+
 
 
 function toggleOutput() {
@@ -629,35 +651,6 @@ window.onclick = function(event) {
       }
     }
   };
-}
-
-async function runFile() {
-    const filename = document.getElementById('file-name').textContent;
-    const outputArea = document.querySelector('.output');
-
-    if (!filename.toLowerCase().endsWith('.py')) {
-        outputArea.textContent = 'Error: Only Python files (.py) can be executed';
-        return;
-    }
-
-    try {
-        const response = await fetch('/run', {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'filename': filename,
-                'Connection': 'keep-alive' }
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(errorText || `HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        outputArea.textContent = result.output;
-        
-    } catch (error) {
-        outputArea.textContent = `Error: ${error.message}`;
-    }
 }
 
 async function applyUpdate(update) {
@@ -819,6 +812,80 @@ function stopPolling() {
     }
 }
 
+function newFile(event) {
+    const popup = document.getElementById('mini-popup');
+    const btn = event.currentTarget;
+    const rect = btn.getBoundingClientRect();
+
+    popup.style.top = `${rect.top + (rect.height / 2)}px`;
+    popup.style.left = `${rect.left + window.scrollX - 130 }px`;
+    popup.style.display = 'block';
+}
+
+function promptNewFile() {
+    const filename = prompt("Enter new file name:");
+    if (filename) createNewFile(filename);
+    closeMiniPopup();
+}
+
+function promptUploadFile() {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '*/*';
+    fileInput.style.display = 'none';
+
+    fileInput.onchange = async () => {
+        try {
+            const file = fileInput.files[0];
+            if (!file) {
+                console.log('No file selected');
+                return;
+            }
+            
+            const filename = file.name;
+            console.log('Selected file:', filename);
+            
+            const content = await file.text();
+            console.log('File content loaded, size:', content.length);
+            
+            await uploadNewFile(content, filename);
+            
+            console.log('File upload completed:', filename);
+        } catch (error) {
+            console.error('Error during file upload:', error);
+            alert('Error uploading file: ' + error.message);
+        } finally {
+            // Clean up the file input
+            document.body.removeChild(fileInput);
+        }
+    };
+
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    closeMiniPopup();
+}
+
+function closeMiniPopup() {
+    document.getElementById('mini-popup').style.display = 'none';
+}
+
+document.addEventListener('click', (e) => {
+    const popup = document.getElementById('mini-popup');
+    const plusBtn = document.querySelector('button[onclick^="newFile"]');
+    
+    const clickedInsidePopup = popup.contains(e.target);
+    const clickedOnButton = plusBtn.contains(e.target);
+
+    if (!clickedInsidePopup && !clickedOnButton) {
+        popup.style.display = 'none';
+    }
+});
+
+
+
+
+
+
 
 
 
@@ -850,3 +917,5 @@ async function sendToPollingServer(endpoint, method = 'GET', headers = {}, body 
 // const result = await sendToPollingServer('/some-endpoint', 'POST', { 'custom-header': 'value' }, { data: 'some data' });
 
 // end
+
+
