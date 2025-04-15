@@ -27,18 +27,123 @@ async function initializeEditor() {
         });
 
             // Add Python completion items
-        monaco.languages.registerCompletionItemProvider('python', {
-            provideCompletionItems: () => {
-            const suggestions = [
-                { label: 'print', kind: monaco.languages.CompletionItemKind.Function, insertText: 'print($1)', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
-                { label: 'len', kind: monaco.languages.CompletionItemKind.Function, insertText: 'len($1)' },
-                { label: 'range', kind: monaco.languages.CompletionItemKind.Function, insertText: 'range($1)' },
-                { label: 'int', kind: monaco.languages.CompletionItemKind.Function, insertText: 'int($1)' },
-                { label: 'str', kind: monaco.languages.CompletionItemKind.Function, insertText: 'str($1)' },
-            ];
-            return { suggestions };
-            }
-        });
+            monaco.languages.registerCompletionItemProvider('python', {
+                provideCompletionItems: () => {
+                    const suggestions = [
+                        // Keywords & Core Syntax
+                        { label: 'def', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'def ${1:function_name}(${2:params}):\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'class', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'class ${1:ClassName}:\n\tdef __init__(self, $2):\n\t\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'return', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'return $1', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'try', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'try:\n\t$1\nexcept ${2:Exception} as ${3:e}:\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'except', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'except ${1:Exception} as ${2:e}:\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'raise', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'raise ${1:Exception}($2)', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'with', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'with ${1:expression} as ${2:var}:\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'if', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'if ${1:condition}:\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'else', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'else:\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'elif', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'elif ${1:condition}:\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'for', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'for ${1:item} in ${2:iterable}:\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'while', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'while ${1:condition}:\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'import', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'import ${1:module}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'from', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'from ${1:module} import ${2:object}', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'and', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'and' },
+                        { label: 'or', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'or' },
+                        { label: 'not', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'not' },
+                        { label: 'in', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'in' },
+                        { label: 'as', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'as' },
+                        { label: 'True', kind: monaco.languages.CompletionItemKind.Constant, insertText: 'True' },
+                        { label: 'False', kind: monaco.languages.CompletionItemKind.Constant, insertText: 'False' },
+                        { label: 'self', kind: monaco.languages.CompletionItemKind.Variable, insertText: 'self' },
+                        { label: '__init__', kind: monaco.languages.CompletionItemKind.Function, insertText: 'def __init__(self, $1):\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'finally', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'finally:\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: "''' '''", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "'''\n$1\n'''", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, documentation: "Multi-line string / comment" },
+            
+                        // Exceptions
+                        { label: 'Exception', kind: monaco.languages.CompletionItemKind.Class, insertText: 'Exception' },
+                        { label: 'FileNotFoundError', kind: monaco.languages.CompletionItemKind.Class, insertText: 'FileNotFoundError' },
+                        { label: 'ValueError', kind: monaco.languages.CompletionItemKind.Class, insertText: 'ValueError' },
+                        { label: 'BrokenPipeError', kind: monaco.languages.CompletionItemKind.Class, insertText: 'BrokenPipeError' },
+            
+                        // Networking & Threads
+                        { label: 'socket', kind: monaco.languages.CompletionItemKind.Module, insertText: 'socket.socket(${1:AF_INET}, ${2:SOCK_STREAM})', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'bind', kind: monaco.languages.CompletionItemKind.Method, insertText: 'bind(($1, $2))', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
+                        { label: 'listen', kind: monaco.languages.CompletionItemKind.Method, insertText: 'listen(${1:backlog})' },
+                        { label: 'accept', kind: monaco.languages.CompletionItemKind.Method, insertText: 'accept()' },
+                        { label: 'recv', kind: monaco.languages.CompletionItemKind.Method, insertText: 'recv(${1:bufsize})' },
+                        { label: 'decode', kind: monaco.languages.CompletionItemKind.Method, insertText: 'decode(${1:utf-8})' },
+                        { label: 'encode', kind: monaco.languages.CompletionItemKind.Method, insertText: 'encode(${1:utf-8})' },
+                        { label: 'timeout', kind: monaco.languages.CompletionItemKind.Method, insertText: 'settimeout(${1:seconds})' },
+                        { label: 'threading', kind: monaco.languages.CompletionItemKind.Module, insertText: 'import threading' },
+                        { label: 'Thread', kind: monaco.languages.CompletionItemKind.Class, insertText: 'threading.Thread(target=${1:func}, args=(${2:args},))' },
+                        { label: 'start', kind: monaco.languages.CompletionItemKind.Method, insertText: 'start()' },
+            
+                        // HTTP-style
+                        { label: 'get', kind: monaco.languages.CompletionItemKind.Method, insertText: 'get($1)' },
+            
+                        // math module
+                        ...['ceil','floor','sqrt','log','log10','exp','pow','fabs','factorial','sin','cos','tan','degrees','radians','pi','e'].map(fn => ({
+                            label: `math.${fn}`, kind: monaco.languages.CompletionItemKind.Function, insertText: `math.${fn}($1)`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        })),
+            
+                        // re module
+                        ...['search','match','findall','sub','split','compile'].map(fn => ({
+                            label: `re.${fn}`, kind: monaco.languages.CompletionItemKind.Function, insertText: `re.${fn}($1)`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        })),
+            
+                        // threading module
+                        ...['Thread','Lock','Event','Timer','current_thread','enumerate'].map(fn => ({
+                            label: `threading.${fn}`, kind: monaco.languages.CompletionItemKind.Function, insertText: `threading.${fn}($1)`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        })),
+            
+                        // os module
+                        ...['getcwd','listdir','mkdir','remove','rename','rmdir','system','path','walk','environ'].map(fn => ({
+                            label: `os.${fn}`, kind: monaco.languages.CompletionItemKind.Function, insertText: `os.${fn}($1)`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        })),
+            
+                        // json module
+                        ...['load','loads','dump','dumps'].map(fn => ({
+                            label: `json.${fn}`, kind: monaco.languages.CompletionItemKind.Function, insertText: `json.${fn}($1)`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        })),
+            
+                        // random module
+                        ...['random','randint','choice','shuffle','uniform','seed'].map(fn => ({
+                            label: `random.${fn}`, kind: monaco.languages.CompletionItemKind.Function, insertText: `random.${fn}($1)`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        })),
+                        
+                        // --- Requests ---
+                        ...['get','post','put','delete','head','patch','options','request','Session'].map(fn => ({
+                            label: `requests.${fn}`, kind: monaco.languages.CompletionItemKind.Function, insertText: `requests.${fn}($1)`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        })),
+
+                        // --- Scrapy (Scrap) ---
+                        ...['Spider','Request','Selector','Field','Item','CrawlSpider','Rule'].map(fn => ({
+                            label: `scrapy.${fn}`, kind: monaco.languages.CompletionItemKind.Class, insertText: `scrapy.${fn}`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        })),
+
+                        // --- Pillow (PIL) ---
+                        ...['Image','ImageDraw','ImageFont','ImageFilter','ImageOps'].map(fn => ({
+                            label: `PIL.${fn}`, kind: monaco.languages.CompletionItemKind.Class, insertText: `PIL.${fn}`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        })),
+
+                        // --- Flask ---
+                        ...['Flask','render_template','request','redirect','url_for','session','abort','jsonify'].map(fn => ({
+                            label: `flask.${fn}`, kind: monaco.languages.CompletionItemKind.Function, insertText: `flask.${fn}($1)`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        })),
+
+                        // --- Pygame ---
+                        ...['init','display','Surface','image','event','key','mixer','time','quit'].map(fn => ({
+                            label: `pygame.${fn}`, kind: monaco.languages.CompletionItemKind.Function, insertText: `pygame.${fn}($1)`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        })),
+
+                        // --- sqlite3 ---
+                        ...['connect','Cursor','execute','executemany','fetchall','commit','close'].map(fn => ({
+                            label: `sqlite3.${fn}`, kind: monaco.languages.CompletionItemKind.Function, insertText: `sqlite3.${fn}($1)`, insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        }))
+                    ];
+            
+                    return { suggestions };
+                }
+            });
+            
 
         isEditorReady = true;
 
@@ -601,11 +706,13 @@ async function uploadNewFile(fileContent, filename) {
         const response = await fetch('/upload-file', {
             method: 'POST',
             headers: {
-                'Content-Type': 'text/plain',
+                'Content-Type': 'application/json',
                 'filename': filename,
                 'userId': userID
             },
-            body: fileContent
+            body: JSON.stringify({
+                content: fileContent
+            })
         });
 
         if (!response.ok) {
