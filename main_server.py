@@ -2,7 +2,6 @@ import json
 import os
 import socket
 import re
-import subprocess
 import threading
 import urllib.parse
 import fcntl
@@ -231,6 +230,8 @@ def modify_file(row, action, content, file_path):
                     raise ValueError("Row number is out of bounds.")
 
             elif action == "insert" or action == "paste":
+                if action == "paste":
+                    content = content.replace('\\"', '"')
                 print(f"Attempting to insert: {row}")
                 if row >= len(lines):
                     print(f"at end of file: {row}")
@@ -333,15 +334,19 @@ def handle_client(client_socket, client_address, num_thread):
                     user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
                     file_path = PATH_TO_FOLDER + "/uploads/" + file_name
 
-                    if not os.path.exists(file_path) and file_name == "File not found" :
-                        print(f"File {file_id} does not exist in the database or path.")
+                    if not os.path.exists(file_path):
+                        if file_name == "File not found":
+                            print(f"File {file_id} does not exist in the database or path.")
+                            client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
+                        else:
+                            print(f"File {file_id} does not exist in the path.")
+                            client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
+                    elif file_name == "File not found":
+                        print(f"File {file_id} does not exist in the database.")
                         client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
+
+
                     else:
-                        if not file_name == "File not found":
-                            # If the file exists in the database but not in the path, create it
-                            with open(file_path, 'w') as file:
-                                file.write("")  # Create an empty file
-                            print(f"File {file_name} created in path.")
                         modification_data = urllib.parse.unquote(match1.group(1)) 
                         modification = json.loads(modification_data)
                                 

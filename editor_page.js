@@ -278,7 +278,6 @@ useCodeEditor((editor) => {
             else if (isPaste) {
                 // Log the changes for debugging
                 console.log(`Content changed from line ${startLineNumber} to ${endLineNumber}:`);
-                console.log(`Changed text: ${changedText}`);
                 // Handle multi-line pasting
                 await handlePaste(editor, startLineNumber, endLineNumber, changedText, lines, change);
             }
@@ -474,9 +473,9 @@ async function handlePaste(editor, startLineNumber, endLineNumber, changedText, 
         // If the paste starts at the beginning of a line, treat it as an insert
         const modification = JSON.stringify({
             content: content,              // First line of the pasted content, or newline if empty
-            row: startLineNumber,                           // Convert to 0-based index
+            row: startLineNumber - 1,                           // Convert to 0-based index
             action: 'insert',                               // Insert new line
-            lineLength: content.length                       // Total number of lines in the editor
+            lineLength: 0                      // Total number of lines in the editor
         });
 
         // Call saveInput with the modification
@@ -487,17 +486,31 @@ async function handlePaste(editor, startLineNumber, endLineNumber, changedText, 
     modifiedLines.shift();
 
     // Process the middle lines (if any)
-    for (const line of modifiedLines.slice(0, -1)) {
-        const content = line || '\n';
-        const modification = JSON.stringify({
-            content: content,                          // The content of the line, or newline if empty
-            row: startLineNumber + modifiedLines.indexOf(line), // Convert to 0-based index
-            action: 'insert',                               // Insert new lines
-            lineLength: content.length                       // Total number of lines in the editor
-        });
+    if (modifiedLines.length > 1) {  // If there are middle lines
+        const middleContent = modifiedLines.slice(0, -1).join('\n');
+        console.log("Middle content before escaping:", middleContent);  // Debug log
 
-        // Call saveInput with the modification
-        await saveInput(modification);
+        if (middleContent) {  // Only process if there's actual content
+            const safeMiddleContent = middleContent.replace(/"/g, '\\"'); // Escape double quotes
+            const modification = JSON.stringify({
+                content: safeMiddleContent,
+                row: startLineNumber + 1,
+                action: 'paste',
+                lineLength: 0
+            });
+
+            console.log("Modification JSON:", modification); // Check the output
+
+            // Validate JSON structure
+            try {
+                JSON.parse(modification); // Validate JSON
+            } catch (error) {
+                console.error("Invalid JSON:", error);
+                return; // Exit if JSON is invalid
+            }
+
+            await saveInput(modification);
+        }
     }
 
     // Process the last line
@@ -505,9 +518,9 @@ async function handlePaste(editor, startLineNumber, endLineNumber, changedText, 
         const content = modifiedLines[modifiedLines.length - 1] || '\n';
         const modification = JSON.stringify({
             content: content, // Last line of the pasted content, or newline if empty
-            row: startLineNumber + modifiedLines.length - 1,  // Convert to 0-based index
+            row: startLineNumber + modifiedLines.length,  // Convert to 0-based index
             action: 'insert',                                 // Update the existing line
-            lineLength: content.length                         // Total number of lines in the editor
+            lineLength: 0                         // Total number of lines in the editor
         });
 
         // Call saveInput with the modification
@@ -519,7 +532,7 @@ async function handlePaste(editor, startLineNumber, endLineNumber, changedText, 
             content: content, // Last line of the pasted content, or newline if empty
             row: startLineNumber + modifiedLines.length - 1,  // Convert to 0-based index
             action: 'insert',                                 // Insert a new line
-            lineLength: content.length                         // Total number of lines in the editor
+            lineLength: 0                         // Total number of lines in the editor
         });
 
         // Call saveInput with the modification

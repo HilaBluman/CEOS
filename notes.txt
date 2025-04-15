@@ -17,9 +17,14 @@ applyUpdate bugs:
 ✔️ hendle writing in the last row
 
 bugs:
+⚪️ whats the point of lineLegth????
+
+⚪️ delete same line in row 0 (the start of the file) - list index out of range
+Error modifying file: An error occurred: list index out of range
 ⚪️ have a problam with cmd/crl z
-⚪️ fix paste func (have a problem with a lot of lines - maybe lock is the solution?) - send all the lines in the mid as one insert.
+- fix paste func: there is a problam with the spaces for example ,if i paste normal there is a new between the first line and the rest. solve(send all the lines in the mid as one insert.)
 ⚪️ the icon is not loading
+
 
 
 
