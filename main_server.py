@@ -294,7 +294,36 @@ def handle_client(client_socket, client_address, num_thread):
                 end = headers_data.find(r"HTTP") - 1
                 request = headers_data[:end]
 
-                if "/poll-updates" in headers_data:
+                if "/get-file-details" in headers_data:
+                    try:
+                        print("in /get-file-details")
+                        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
+                        if not file_id:
+                            raise ValueError("File ID not provided")
+
+                        # Get file details from database
+                        file_details = file_db.get_file_details(file_id)
+                        if not file_details:
+                            response = ready_to_send("404 Not Found", json.dumps({"error": "File not found"}), "application/json")
+                            client_socket.send(response.encode())
+                            return
+                        # Get users with access to this file
+                        users_with_access = file_permissions_db.get_users_with_access(file_id)
+                        
+                        # Prepare response data
+                        response_data = {
+                            "filename": file_details['filename'],
+                            "users": users_with_access
+                        }
+                        response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
+                        client_socket.send(response.encode())
+                    except Exception as e:
+                        print(f"Error in get-file-details: {str(e)}")
+                        error_response = json.dumps({"error": str(e)})
+                        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+                        client_socket.send(response.encode())
+
+                elif "/poll-updates" in headers_data:
                     try:
                         fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
                         lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)')
@@ -517,9 +546,47 @@ def handle_client(client_socket, client_address, num_thread):
                             new_file(client_socket, PATH_TO_FOLDER, headers_data,content)
                         else:
                             client_socket.send(ready_to_send("400 Bad Request", "Broken pipe or No content"))
+                    
+                    elif "/add-user-to-file" in headers_data:
+                        try:
+                            file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
+                            if not file_id:
+                                raise ValueError("File ID not provided")
+
+                            # Get the request body
+                            content_length = int(get_header(client_socket, headers_data, r'Content-Length:\s*(\d+)'))
+                            body = client_socket.recv(content_length).decode()
+                            data = json.loads(body)
+                            new_username = data.get('username')
+
+                            if not new_username:
+                                raise ValueError("Username not provided")
+
+                            # Check if user exists
+                            user_id = user_db.get_user_id(new_username)
+                            if not user_id:
+                                response = ready_to_send("404 Not Found", json.dumps({"error": "User not found"}), "application/json")
+                                client_socket.send(response.encode())
+                                return
+
+                            # Add user to file permissions
+                            success = file_permissions_db.grant_access(file_id, user_id)
+                            if success:
+                                response = ready_to_send("200 OK", json.dumps({"success": "User added successfully"}), "application/json")
+                            else:
+                                response = ready_to_send("400 Bad Request", json.dumps({"error": "Failed to add user"}), "application/json")
+                            
+                            client_socket.send(response.encode())
+                        except Exception as e:
+                            print(f"Error in add-user-to-file: {str(e)}")
+                            error_response = json.dumps({"error": str(e)})
+                            response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+                            client_socket.send(response.encode())
                     else:
                         print("Not valid action")
                         raise ValueError("Not valid action")
+                        
+
 
                 except Exception as e:
                     print(f"Error processing POST request: {str(e)}")

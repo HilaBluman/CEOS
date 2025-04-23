@@ -21,19 +21,46 @@ color: #a9b1d6;
 position: relative;
 height: 800px; /* Increased height */
 width: 100%; /* Full width */
+
 }
+
+.right-panel-container {
+  display: flex;
+  position: relative;
+  width: 100%;
+  margin-top: 50px;
+  border-top: 1px solid #404556;
+  border-left: 1px solid #404556;
+}
+
+.right-panel {
+  flex-direction: column;
+  padding: 0.75rem;
+  background: var(--primary);
+  overflow: auto;
+  width: 80px;
+}
+
 
 .resizer {
-  background-color: #ccc;
-  width: 5px;
-  cursor: ew-resize;
+  cursor: ew-resize; /* Change cursor on hover */
+  background: #ccc; /* Change this for visual feedback */
+  width: 5px; /* Width of the resizer */
+  height: 100%; /* Full height */
   position: absolute;
+  right: 0;
   top: 0;
-  bottom: 0;
+  z-index: 10; /* Ensure it's on top */
 }
 
-.resizer:hover {
-  background-color: #aaa;
+.resize-handle {
+  width: 5px; /* or whatever width you prefer */
+  background-color: gray;
+  cursor: col-resize;
+  position: absolute;
+  right: 0; /* Aligns it to the right edge of the right panel */
+  height: 100%; /* Full height of the right panel */
+  z-index: 100; /* Make sure it stays above other elements */
 }
 
 .platform {
@@ -202,14 +229,6 @@ button:hover {
 }
 
 
-.right-panel {
-  display: flex;
-  flex-direction: column;
-  padding: 0.75rem;
-  background: var(--primary);
-  margin-top: 50px;
-}
-
 .chat-section {
   flex: 0 0 auto;
   margin-bottom: 1rem;
@@ -308,4 +327,88 @@ button:hover {
     gap: 0.25rem;
     font-size: 0.85em;
     margin-left: 20px;
+}
+
+.mini-popup {
+  position: absolute;
+  display: none;
+  background: black;
+  box-shadow: 0 0 6px rgba(0,0,0,0.5);
+  z-index: 250;
+  width: 130px;
+  top: 0;
+  left: 0;
+}
+
+.mini-option {
+  padding: 8px 10px;
+  color: white;
+  cursor: pointer;
+  font-size: 0.95em;
+  border: 1px solid var(--accent);
+}
+
+.mini-option:hover {
+  background: var(--accent);
+  color: #140d0d;
+}
+
+#file-details {
+  position: fixed;
+  display: show;
+  right: -400px; /* Hidden off-screen */
+  top: 0;
+  width: 300px;
+  height: 100%;
+  background-color: var(--secondary);
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.5);
+  transition: right 0.3s ease;
+  padding: 20px;
+  z-index: 1000;
+}
+
+#file-details.slide-in {
+  right: 0; /* Slide in */
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  border: 1px solid var(--accent);
+  padding: 8px;
+  text-align: left;
+}
+
+th {
+  background-color: rgb(122, 7, 164);
+}
+
+#file-details button {
+    margin: 10px 0;
+    width: 100%;
+}
+
+#file-details #add-user-btn {
+    margin-bottom: 20px;
+}
+
+#file-details #close-panel-btn {
+    margin-top: 20px;
+}
+
+#file-details table {
+    margin-bottom: 30px;
+}
+
+#file-details input[type="text"] {
+    margin-bottom: 15px;
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    background-color: var(--primary);
+    color: var(--text);
 }

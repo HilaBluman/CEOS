@@ -8,7 +8,9 @@
     <link rel="stylesheet" href="css/editor_page.css"> 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs/loader.min.js"></script>
 </head>
+
 <body> 
+
   <header class="top-bar">
         <div class="menu-icon">☰</div>
         <div class="logo">
@@ -41,13 +43,24 @@
     </div>
 
 
-      <div class="right-panel">
-        <div class="toolbar">
-          <button onclick="newFile()">➕</button>
-          <button onclick="popFileInfo()">📄</button> <!--file info -->
-          <button>👥</button>
-          <button onclick="toggleOutput()">📟</button>
+      <div class="right-panel-container">
+        <div class="right-panel">
+            <div class="toolbar">
+                <button onclick="newFile(event)">➕</button>
+                <button onclick="popFileInfo()">📄</button>
+                <button>👥</button>
+                <button onclick="toggleOutput()">📟</button>
+            </div>
+    
+            <div class="output-section">
+                <div class="output">
+                    <div class="output-title">Output Console</div>
+                    // Secondary output console...
+                </div>
+            </div>
         </div>
+        <div class="resizer"></div>
+    </div>
       
         <div class="output-section">
           <div class="output">
@@ -57,13 +70,57 @@
         </div>
       </div>
 
-<div id="file-popup" class="popup" style="display: none;">
+ <!-- Choosing A File Popup -->     
+<div id="file-popup" class="popup" style="display: flex;">
     <div class="popup-content">
         <span class="close-button" onclick="closeFilePopup()">&times;</span>
         <h2>Select a File to Load</h2>
         <ul id="file-list"></ul>
     </div>
 </div>
+
+<!-- Mini File Options Popup -->
+<div id="mini-popup" class="mini-popup">
+  <div class="mini-option" onclick="promptNewFile()">➕ Create File</div>
+  <div class="mini-option" onclick="promptUploadFile()">📤 Upload File</div>
+</div>
+
+<div id="file-details" class="side-panel">
+  <h2 id="file-name">File Name: <span id="filename"></span></h2>
+  <h3>Users with Access:</h3>
+  <table id="user-table">
+      <thead>
+          <tr>
+              <th>Username</th>
+          </tr>
+      </thead>
+      <tbody id="user-list">
+          <!-- User list will be added here -->
+      </tbody>
+  </table>
+  <input type="text" id="new-username" placeholder="Enter new username">
+  <button id="add-user-btn">Add User</button>
+  <button id="close-panel-btn">Close</button>
+</div>
+
+<!-- Add this inside the <body> tag of your existing HTML -->
+  <div id="file-details" class="side-panel">
+    <h2 id="file-name">File Name: <span id="filename"></span></h2>
+    <h3>Users with Access:</h3>
+    <table id="detailsTable">
+        <thead>
+            <tr>
+                <th>Filename</th>
+                <th>Users</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Content will be populated here -->
+        </tbody>
+    </table>
+    <button id="close-panel-btn">Close</button>
+</div>
+
 
   <script type="text/javascript" src="js/editor_page.js"></script>
 </body>

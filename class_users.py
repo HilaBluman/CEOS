@@ -70,6 +70,7 @@ class UserDatabase:
         
         cursor.execute('SELECT userID FROM users WHERE username = ? AND password = ?', (username, password))
         user = cursor.fetchone()
+        conn.close()
         
         if user:
             userID = user['userID']  # Get the userID from the fetched user
@@ -77,9 +78,13 @@ class UserDatabase:
         else:
             return {'status': 401, 'message': 'Invalid username or password.'}
         
+    def get_user_id(self, username):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT userID FROM users WHERE username = ?', (username,))
+        result = cursor.fetchone()
         conn.close()
-
-import sqlite3
+        return result[0] if result else None
 
 class FileInfoDatabase:
     def __init__(self, db_path):
@@ -189,6 +194,20 @@ class FileInfoDatabase:
         finally:
             conn.close()
 
+    def get_file_details(self, file_id):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT filename, ownerID FROM fileInfo WHERE fileID = ?', (file_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return {
+                'filename': result[0],
+                'owner_id': result[1]
+            }
+        return None
+
 class FilePermissionsDatabase:
     def __init__(self, db_path):
         self.db_path = db_path
@@ -271,6 +290,21 @@ class FilePermissionsDatabase:
         else:
             return False  # User does not have access to the file
         
+
+    def get_users_with_access(self, file_id):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT u.username 
+            FROM filePermissions fp
+            JOIN users u ON fp.userID = u.userID
+            WHERE fp.fileID = ?
+        ''', (file_id,))
+        results = cursor.fetchall()
+        conn.close()
+        
+        return [row[0] for row in results]
+
 class ChangeLogDatabase:
     def __init__(self, db_path):
         self.db_path = db_path

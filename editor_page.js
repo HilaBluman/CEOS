@@ -27,9 +27,9 @@ async function initializeEditor() {
         });
 
             // Add Python completion items
-            monaco.languages.registerCompletionItemProvider('python', {
-                provideCompletionItems: () => {
-                    const suggestions = [
+        monaco.languages.registerCompletionItemProvider('python', {
+            provideCompletionItems: () => {
+            const suggestions = [
                         // Keywords & Core Syntax
                         { label: 'def', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'def ${1:function_name}(${2:params}):\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
                         { label: 'class', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'class ${1:ClassName}:\n\tdef __init__(self, $2):\n\t\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
@@ -140,9 +140,9 @@ async function initializeEditor() {
                         }))
                     ];
             
-                    return { suggestions };
-                }
-            });
+            return { suggestions };
+            }
+        });
             
 
         isEditorReady = true;
@@ -188,6 +188,53 @@ let userID = 0;
 let username = "";
 let lastModID = -1; 
 
+// Add these variables at the top of the file with other global variables
+let startWidth;
+let rightPanel;
+let mainSection;
+
+function initializeResize() {
+    rightPanel = document.querySelector('.right-panel');
+    mainSection = document.querySelector('.main');
+    
+    // Create resize handle
+    const resizeHandle = document.createElement('div');
+    resizeHandle.className = 'resize-handle';
+    rightPanel.appendChild(resizeHandle);
+    
+    // Add event listeners for resizing
+    resizeHandle.addEventListener('mousedown', startResize);
+    document.addEventListener('mousemove', handleResize);
+    document.addEventListener('mouseup', stopResize);
+}
+
+function startResize(e) {
+    isResizing = true;
+    startX = e.clientX;
+    startWidth = rightPanel.offsetWidth;
+    document.body.style.cursor = 'col-resize';
+}
+
+function handleResize(e) {
+    if (!isResizing) return;
+    
+    const width = startWidth + (startX - e.clientX);
+    const minWidth = 200; // Minimum width for right panel
+    const maxWidth = window.innerWidth * 0.8; // Maximum width for right panel
+    
+    if (width >= minWidth && width <= maxWidth) {
+        rightPanel.style.width = `${width}px`;
+        mainSection.style.width = `calc(100% - ${width}px)`;
+    }
+}
+
+function stopResize() {
+    isResizing = false;
+    document.body.style.cursor = 'default';
+}
+
+// Initialize the resizing functionality when the document is ready
+document.addEventListener('DOMContentLoaded', initializeResize);
 
 // Functionality Constants
 const DEBOUNCE_DELAY = 500; // ms
@@ -224,6 +271,7 @@ const languageMap = {
 document.addEventListener('DOMContentLoaded', async () => {
     await initializeEditor();
     await loadInitialFile();
+    initializeResize();
 });
 
 document.addEventListener('mousemove', onDocumentMouseMove);
@@ -440,7 +488,7 @@ async function loadContent(fileId) {
             console.log("lastModID: " + lastModID);
             codeEditor.setValue(data.fullContent);
         }
-        startPolling();
+        //startPolling();
     } catch (error) {
         console.error('Error loading initial content:', error);
     }
@@ -492,7 +540,7 @@ async function handlePaste(editor, startLineNumber, endLineNumber, changedText, 
 
         if (middleContent) {  // Only process if there's actual content
             const safeMiddleContent = middleContent.replace(/"/g, '\\"'); // Escape double quotes
-            const modification = JSON.stringify({
+        const modification = JSON.stringify({
                 content: safeMiddleContent,
                 row: startLineNumber + 1,
                 action: 'paste',
@@ -509,7 +557,7 @@ async function handlePaste(editor, startLineNumber, endLineNumber, changedText, 
                 return; // Exit if JSON is invalid
             }
 
-            await saveInput(modification);
+        await saveInput(modification);
         }
     }
 
@@ -1002,6 +1050,77 @@ document.addEventListener('click', (e) => {
 });
 
 
+function popFileInfo() {
+    if (!fileID || !selectedFileName) {
+        alert('Please select a file first');
+        return;
+    }
+
+    // Open the side panel
+    const sidePanel = document.getElementById('file-details');
+    sidePanel.classList.add('open');
+
+    // Set the filename
+    document.getElementById('filename').textContent = selectedFileName;
+
+    // Load file details
+    loadFileDetails();
+}
+
+async function loadFileDetails() {
+    try {
+        // Fetch file details from server
+        const response = await fetch('/get-file-details', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'fileID': fileID
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("Details data :", JSON.stringify(data));
+
+        // Update the filename
+        document.getElementById('filename').textContent = data.filename;
+
+
+        if (Array.isArray(data.users)) {
+            // Clear existing table content
+            const userList = document.getElementById('user-list');
+            userList.innerHTML = '';
+            
+            // Populate the table
+            data.users.forEach((user) => {             
+                // Create table row
+                const row = document.createElement('tr');
+                
+                // Create table cell
+                const cell = document.createElement('td');
+                cell.textContent = user;
+                
+                // Append cell to row and row to table
+                row.appendChild(cell);
+                userList.appendChild(row);
+            });
+        }
+        // Slide in the details window
+        document.getElementById('file-details').classList.add('slide-in');
+
+        // Add event listener for closing the panel
+        document.getElementById('close-panel-btn').onclick = () => {
+            document.getElementById('file-details').classList.remove('slide-in');
+        };
+
+    } catch (error) {
+        console.error('Error loading file details:', error);
+        alert('Error loading file details');
+    }
+}
 
 
 
@@ -1037,5 +1156,6 @@ async function sendToPollingServer(endpoint, method = 'GET', headers = {}, body 
 // const result = await sendToPollingServer('/some-endpoint', 'POST', { 'custom-header': 'value' }, { data: 'some data' });
 
 // end
+
 
 
