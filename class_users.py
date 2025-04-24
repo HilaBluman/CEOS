@@ -109,7 +109,18 @@ class FileInfoDatabase:
         
         conn.commit()
         conn.close()
-
+    def is_owner(self, fileID, userID):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT ownerID FROM fileInfo WHERE fileID = ?', (fileID,))
+        owner = cursor.fetchone()
+        conn.close()
+        
+        if owner and owner['ownerID'] == userID:
+            return True  # The user is the owner of the file
+        else:
+            return False  # The user is not the owner of the file
     def get_db_connection(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -236,16 +247,19 @@ class FilePermissionsDatabase:
         conn.row_factory = sqlite3.Row
         return conn
 
-    def grant_access(self, fileID, userID):
+    def grant_access(self, fileID, userID,role=None):
         conn = self.get_db_connection()
         cursor = conn.cursor()
-        
+        if(role != None):
+            qerry = 'INSERT INTO filePermissions (fileID, userID, role) VALUES (?, ?)', (fileID, userID,role)
+        else:
+            qerry = 'INSERT INTO filePermissions (fileID, userID) VALUES (?, ?)', (fileID, userID)
         try:
-            cursor.execute('INSERT INTO filePermissions (fileID, userID) VALUES (?, ?)', (fileID, userID))
+            cursor.execute(qerry[0], qerry[1])
             conn.commit()
             return {'status': 201, 'message': 'Access granted successfully.'}
         except sqlite3.IntegrityError:
-            return {'status': 409, 'message': 'User  already has access to this file.'}
+            return {'status': 409, 'message': 'User already has access to this file.'}
         except Exception as e:
             return {'status': 500, 'message': str(e)}
         finally:
@@ -295,7 +309,7 @@ class FilePermissionsDatabase:
         conn = self.get_db_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT u.username 
+            SELECT u.username, fp.role 
             FROM filePermissions fp
             JOIN users u ON fp.userID = u.userID
             WHERE fp.fileID = ?
@@ -303,7 +317,7 @@ class FilePermissionsDatabase:
         results = cursor.fetchall()
         conn.close()
         
-        return [row[0] for row in results]
+        return [{'username': row[0], 'role': row[1] or 'user'} for row in results]
 
 class ChangeLogDatabase:
     def __init__(self, db_path):

@@ -44,7 +44,7 @@ width: 100%; /* Full width */
 
 .resizer {
   cursor: ew-resize; /* Change cursor on hover */
-  background: #ccc; /* Change this for visual feedback */
+  background: rgb(244, 149, 25); /* Change this for visual feedback */
   width: 5px; /* Width of the resizer */
   height: 100%; /* Full height */
   position: absolute;
@@ -55,7 +55,7 @@ width: 100%; /* Full width */
 
 .resize-handle {
   width: 5px; /* or whatever width you prefer */
-  background-color: gray;
+  background-color: rgb(244, 149, 25);
   cursor: col-resize;
   position: absolute;
   right: 0; /* Aligns it to the right edge of the right panel */
@@ -352,6 +352,7 @@ button:hover {
   background: var(--accent);
   color: #140d0d;
 }
+
 
 #file-details {
   position: fixed;

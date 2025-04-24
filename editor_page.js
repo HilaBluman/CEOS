@@ -233,10 +233,23 @@ function stopResize() {
     document.body.style.cursor = 'default';
 }
 
-// Initialize the resizing functionality when the document is ready
-document.addEventListener('DOMContentLoaded', initializeResize);
+function onDocumentMouseMove(e) {
+    if (!isResizing) return;
 
-// Functionality Constants
+    const moveX = e.pageX - startX;
+    const newWidth = startOutputWidth - moveX;
+
+    if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
+        outputContainer.style.width = `${newWidth}px`;
+    }
+}
+
+function onDocumentMouseUp() {
+    isResizing = false;
+    document.body.classList.remove('resizing');
+}
+
+// Functisonality Constants
 const DEBOUNCE_DELAY = 500; // ms
 const MIN_WIDTH = 80;
 const MAX_WIDTH = window.innerWidth * 0.8;
@@ -293,6 +306,9 @@ useCodeEditor((editor) => {
             isLoaded = false;
             return;
         }
+        // Close file details
+        document.getElementById('file-details').classList.remove('slide-in');
+
         for (const change of event.changes) {
             const startLineNumber = change.range.startLineNumber; // Starting line number of the change
             const endLineNumber = change.range.endLineNumber;     // Ending line number of the change
@@ -414,26 +430,10 @@ function onKeyZ(event){
 }
 
 
-function onDocumentMouseMove(e) {
-    if (!isResizing) return;
-
-    const moveX = e.pageX - startX;
-    const newWidth = startOutputWidth - moveX;
-
-    if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
-        outputContainer.style.width = `${newWidth}px`;
-    }
-}
-
-function onDocumentMouseUp() {
-    isResizing = false;
-    document.body.classList.remove('resizing');
-}
-
 async function onDocumentKeySave(event) {
     if ((event.ctrlKey || event.metaKey) && event.key === 's') {
         event.preventDefault();
-        isPasting = true;
+        isLoaded = true;
         await saveAll();
     }
 }
@@ -488,7 +488,7 @@ async function loadContent(fileId) {
             console.log("lastModID: " + lastModID);
             codeEditor.setValue(data.fullContent);
         }
-        //startPolling();
+        startPolling();
     } catch (error) {
         console.error('Error loading initial content:', error);
     }
@@ -643,7 +643,6 @@ async function loadInitialFile() {
     userID = await get_userID(); // Ensure this is awaited if it's a promise
 
     const filesInfo = await GetUserFiles(userID); // Fetch user files
-    //console.log('Fetched files:', filesInfo); // Debugging line
 
     // Populate both the popup and sidebar file lists
     populateFileLists(filesInfo);
@@ -692,6 +691,8 @@ function populateFileLists(filesInfo) {
                 await loadContent(fileId);
                 // Close the popup if it's open
                 closeFilePopup();
+                // Close file detail if open
+                document.getElementById('file-details').classList.remove('slide-in');
             };
             
             popupListItem.onclick = handleFileClick;
@@ -708,6 +709,9 @@ function populateFileLists(filesInfo) {
 
 
 async function createNewFile(filename) {
+    if (!hasValidExtension(filename)) {
+            filename = filename.replace(/\..*$/, '.txt');
+    }  //fix extenstion ending
         try {
             const response = await fetch('/new-file', {
                 method: 'GET',
@@ -796,9 +800,6 @@ async function uploadNewFile(fileContent, filename) {
         throw error;
     }
 }
-
-
-
 
 function toggleOutput() {
     const outputSection = document.querySelector('.output-section');
@@ -1088,7 +1089,6 @@ async function loadFileDetails() {
         // Update the filename
         document.getElementById('filename').textContent = data.filename;
 
-
         if (Array.isArray(data.users)) {
             // Clear existing table content
             const userList = document.getElementById('user-list');
@@ -1099,12 +1099,19 @@ async function loadFileDetails() {
                 // Create table row
                 const row = document.createElement('tr');
                 
-                // Create table cell
-                const cell = document.createElement('td');
-                cell.textContent = user;
+                // Create username cell
+                const usernameCell = document.createElement('td');
+                usernameCell.textContent = user.username;
                 
-                // Append cell to row and row to table
-                row.appendChild(cell);
+                // Create role cell
+                const roleCell = document.createElement('td');
+                roleCell.textContent = user.role || 'user'; // Default to 'user' if role is not specified
+                
+                // Append cells to row
+                row.appendChild(usernameCell);
+                row.appendChild(roleCell);
+                
+                // Append row to table
                 userList.appendChild(row);
             });
         }
@@ -1156,6 +1163,15 @@ async function sendToPollingServer(endpoint, method = 'GET', headers = {}, body 
 // const result = await sendToPollingServer('/some-endpoint', 'POST', { 'custom-header': 'value' }, { data: 'some data' });
 
 // end
+
+function hasValidExtension(filename) {
+    if (!filename) return false;
+    const validExtensions = [
+        '.py', '.js', '.ts', '.html', '.css', '.json', '.java', '.c', '.cpp', '.cs', '.go', '.php', '.r', '.rb', '.sh', '.sql', '.xml', '.yaml', '.md', '.swift', '.dockerfile', '.ini', '.plaintext', '.bat', '.powershell'
+    ];
+    const extension = filename.substring(filename.lastIndexOf('.'));
+    return validExtensions.includes(extension.toLowerCase());
+}
 
 
 

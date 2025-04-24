@@ -164,7 +164,7 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value = ""):
             print(f"File {filename} created in path.")
             # Get the file ID of the newly created file
             file_id = file_db.check_file_exists(user_id, filename)
-            file_permissions_db.grant_access(file_id, user_id)
+            file_permissions_db.grant_access(file_id, user_id,"owner")
 
             data = json.dumps({
                 "success": "File created successfully",
@@ -294,36 +294,7 @@ def handle_client(client_socket, client_address, num_thread):
                 end = headers_data.find(r"HTTP") - 1
                 request = headers_data[:end]
 
-                if "/get-file-details" in headers_data:
-                    try:
-                        print("in /get-file-details")
-                        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
-                        if not file_id:
-                            raise ValueError("File ID not provided")
-
-                        # Get file details from database
-                        file_details = file_db.get_file_details(file_id)
-                        if not file_details:
-                            response = ready_to_send("404 Not Found", json.dumps({"error": "File not found"}), "application/json")
-                            client_socket.send(response.encode())
-                            return
-                        # Get users with access to this file
-                        users_with_access = file_permissions_db.get_users_with_access(file_id)
-                        
-                        # Prepare response data
-                        response_data = {
-                            "filename": file_details['filename'],
-                            "users": users_with_access
-                        }
-                        response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
-                        client_socket.send(response.encode())
-                    except Exception as e:
-                        print(f"Error in get-file-details: {str(e)}")
-                        error_response = json.dumps({"error": str(e)})
-                        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
-                        client_socket.send(response.encode())
-
-                elif "/poll-updates" in headers_data:
+                if "/poll-updates" in headers_data:
                     try:
                         fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
                         lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)')
@@ -389,6 +360,36 @@ def handle_client(client_socket, client_address, num_thread):
                             msg = f"Error modifying file: {str(e)}"
                         print(msg)
                         client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
+                        
+                if "/get-file-details" in headers_data:
+                    try:
+                        print("in /get-file-details")
+                        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
+                        if not file_id:
+                            raise ValueError("File ID not provided")
+
+                        # Get file details from database
+                        file_details = file_db.get_file_details(file_id)
+                        if not file_details:
+                            response = ready_to_send("404 Not Found", json.dumps({"error": "File not found"}), "application/json")
+                            client_socket.send(response.encode())
+                            return
+                        # Get users with access to this file
+                        users_with_access = file_permissions_db.get_users_with_access(file_id)
+                        #owner_username_user_id = 
+                        
+                        # Prepare response data
+                        response_data = {
+                            "filename": file_details['filename'],
+                            "users": users_with_access
+                        }
+                        response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
+                        client_socket.send(response.encode())
+                    except Exception as e:
+                        print(f"Error in get-file-details: {str(e)}")
+                        error_response = json.dumps({"error": str(e)})
+                        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+                        client_socket.send(response.encode())
 
                 elif "/get-user-files" in headers_data:
                     try:

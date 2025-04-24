@@ -17,9 +17,9 @@ applyUpdate bugs:
 ✔️ hendle writing in the last row
 
 bugs:
-⚪️ file- details needs to send ower id as well and olny show that option to add if owner
+✔️ file- details needs to show role of the username (editor, owner)
 ⚪️ whats the point of lineLegth????
-⚪️ fix resizing
+⚪️ fix resizing - so right panle will show all ways
 ⚪️ delete same line in row 1 it copys the row 1 to row 0 but does not remove row 0
 Error modifying file: An error occurred: list index out of range
 ⚪️ have a problam with cmd/crl z
