@@ -20,7 +20,7 @@ def file_exist(file_path):
     return True
 
 
-def handle_404(client_socket):  # for windows change to C:\webroot\ for mac /Users/hila/webroot/
+def handle_404(client_socket):  
     with open(r"/Users/hila/CEOs/status_code/404.png", "rb") as file3:
         photo = file3.read()
         file_type = "png"
@@ -28,7 +28,7 @@ def handle_404(client_socket):  # for windows change to C:\webroot\ for mac /Use
         client_socket.send(response.encode() + photo)
 
 
-def handle_403(client_socket):  # for windows change to C:\webroot\ for mac /Users/hila/webroot/
+def handle_403(client_socket):
     with open(r"/Users/hila/CEOs/status_code/403.webp", "rb") as file3:
         photo = file3.read()
         file_type = "webp"
@@ -36,12 +36,17 @@ def handle_403(client_socket):  # for windows change to C:\webroot\ for mac /Use
         client_socket.send(response.encode() + photo)
 
 
-def handle_500(client_socket):  # for windows change to C:\webroot\ for mac /Users/hila/webroot/
-    with open(r"/Users/hila/CEOs/status_code/500.png", "rb") as file3:
-        photo = file3.read()
-        file_type = "png"
-        response = ready_to_send("500 Internal Server Error", photo, file_type)
-        client_socket.send(response.encode() + photo)
+def handle_500(client_socket):
+    try:
+        with open(r"/Users/hila/CEOs/status_code/500.png", "rb") as file3:
+            photo = file3.read()
+            file_type = "png"
+            response = ready_to_send("500 Internal Server Error", photo, file_type)
+            client_socket.send(response.encode() + photo)
+    except BrokenPipeError:
+        print("Client disconnected before response could be sent.")
+    except Exception as e:
+        print(f"An error occurred while handling 500 error: {str(e)}")
 
 
 def file_forbidden(file_path, forbidden):
@@ -299,19 +304,18 @@ def handle_client(client_socket, client_address, num_thread):
                         fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
                         lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)')
                         userID = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
-                        
                         # Check for updates
                         updates = change_log_db.get_changes_for_user(fileID,lastModID, userID)
-                        
                         if updates:
                             response = ready_to_send(200, json.dumps(updates), content_type="application/json")
-                        else:
+                        else: 
                             response = ready_to_send(200, json.dumps("No updates"), content_type="application/json")
                         try:
                             client_socket.send(response.encode())
                         except BrokenPipeError:
                             print("Client disconnected before response could be sent")
                             return
+                        
                     except Exception as e:
                         print(f"Error in poll-updates: {str(e)}")
                         try:
@@ -361,7 +365,7 @@ def handle_client(client_socket, client_address, num_thread):
                         print(msg)
                         client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
                         
-                if "/get-file-details" in headers_data:
+                elif "/get-file-details" in headers_data:
                     try:
                         print("in /get-file-details")
                         file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
@@ -504,7 +508,7 @@ def handle_client(client_socket, client_address, num_thread):
                     
 
                 else:
-                    print("500")
+                    print("last else 500")
                     handle_500(client_socket)
 
             elif action == "POST":
@@ -524,7 +528,7 @@ def handle_client(client_socket, client_address, num_thread):
                         client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
 
                     elif "/login" in headers_data:
-                        print("headers_data: " + headers_data)
+                        #print("headers_data: " + headers_data)
                         body = client_socket.recv(content_length).decode()
                         data = json.loads(body)
                         username = data.get('username')

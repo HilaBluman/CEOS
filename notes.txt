@@ -1,10 +1,9 @@
 create:
-* what is async??? (read about it)
 * allow the creater of the file to allow users to access file
 * add the user name next to the curser of the person that is editing the file (maybe use different colors foe each person) - see whatsupp
 * add an option to see the changes that happend from the a spacific time and date (using the changes to go back? than use LSC to show the changes) - see whatsupp
 * maybe add verstions - see whatsupp (save every 20 modiftions or 1 day if less modiftions) (if no modftions for a long time it wont save an till there i modiftion)
-
+* add refresh button to the files 
 
 
 applyUpdate bugs:
@@ -17,19 +16,27 @@ applyUpdate bugs:
 ✔️ hendle writing in the last row
 
 bugs:
-✔️ file- details needs to show role of the username (editor, owner)
-⚪️ whats the point of lineLegth????
-⚪️ fix resizing - so right panle will show all ways
+
+important:
+⚪️ fix paste func: there is a problam with the spaces for example ,if i paste normal there is a new between the 
+first line and the rest. solve(send all the lines in the mid as one insert.)
 ⚪️ delete same line in row 1 it copys the row 1 to row 0 but does not remove row 0
 Error modifying file: An error occurred: list index out of range
 ⚪️ have a problam with cmd/crl z
-- fix paste func: there is a problam with the spaces for example ,if i paste normal there is a new between the first line and the rest. solve(send all the lines in the mid as one insert.)
+⚪️ handle delete file
+
+
+less significant:
+* what is async??? (read about it)
+* whats the point of lineLegth????
+⚪️ fix resizing - so right panle will show all ways
 ⚪️ the icon is not loading
 
 
 
 
 done:
+✔️ file- details needs to show role of the username (editor, owner)
 ✔️ creating a new file
 ✔️ sends the same content from data base to more than 1 time - check lock on db && lock file when writing in to it
 ✔️ the code editor does not show the options of completion to the word - the problam was in the css because i used (margin-top: 50px) it affected the options in the tab of completion options. i fixed it by moving the (margin-top: 50px) to the tab css 

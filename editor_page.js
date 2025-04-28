@@ -934,7 +934,6 @@ async function pollForUpdates() {
                 'fileID': fileID,
                 'userID': userID,
                 'lastModID': lastModID,
-                'Connection': 'close'
             }
         });
 
@@ -945,14 +944,15 @@ async function pollForUpdates() {
         const data = await response.json();
         
         if (data == "No updates") {
-            //console.log('No updates available');
             return;
         }
         else if (Array.isArray(data) && data.length > 0) {
+            console.log('Received updates:', data);
             // Process all updates in order
             for (const update of data) {
+                if(update.ModID !== lastModID)
+                console.log("Applying update with ModID:", update.ModID);
                 lastModID = update.ModID;
-                console.log("modification: " + JSON.stringify(update.modification));
                 await applyUpdate(update.modification);
             }
         }
@@ -968,6 +968,7 @@ async function pollForUpdates() {
         }
     }
 }
+
 
 function startPolling() {
     // Poll every 0.1 seconds
