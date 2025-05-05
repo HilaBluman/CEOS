@@ -1,5 +1,6 @@
 create:
 * allow the creater of the file to allow users to access file
+* allow the creater of the file to remove users to access file 
 * add the user name next to the curser of the person that is editing the file (maybe use different colors foe each person) - see whatsupp
 * add an option to see the changes that happend from the a spacific time and date (using the changes to go back? than use LSC to show the changes) - see whatsupp
 * maybe add verstions - see whatsupp (save every 20 modiftions or 1 day if less modiftions) (if no modftions for a long time it wont save an till there i modiftion)
@@ -9,7 +10,9 @@ create:
 applyUpdate bugs:
 ✔️ deleting a line (not highlight) - an empty line 
 ✔️ hendle delete 
-⚪️ hendle pasting -(have a problam with saving paste) when pasting more then 1 line it replaces the lines below (one line good)
+✔️ hendle pasting -(have a problam with saving paste) when pasting more then 1 line it replaces the lines below (one line good)
+✔️ fix pasting logic - hendle receiving all the lines in the mid as one insert.
+⚪️ fixed problam in file so check = when highlighting a content and pasting (more them 1 row) the last row does not load properly
 ✔️ hendle a new row
 ⚪️ new row in a mid of chacters - enters paste (problam in hendling - the other client & server is not getiing the right content)
 ✔️ new row end of file
@@ -18,10 +21,10 @@ applyUpdate bugs:
 bugs:
 
 important:
-⚪️ fix paste func: there is a problam with the spaces for example ,if i paste normal there is a new between the 
-first line and the rest. solve(send all the lines in the mid as one insert.)
-⚪️ delete same line in row 1 it copys the row 1 to row 0 but does not remove row 0
-Error modifying file: An error occurred: list index out of range
+⚪️ delete at the start of a line
+✔️ paste listener check if in mid of row if not sends addPaste if it does send the mid content and update the lines
+⚪️ fix delte highlighted - deletes all the lines except the line one before the last one when delete row and a little bit.
+⚪️ when highlighting a content and pasting (more them 1 row) the last row does not load properly
 ⚪️ have a problam with cmd/crl z
 ⚪️ handle delete file
 
@@ -33,9 +36,9 @@ less significant:
 ⚪️ the icon is not loading
 
 
-
-
 done:
+✔️ fix paste func: there is a problam with the spaces for example ,if i paste normal there is a new line between the 
+first line and the rest. solve(send all the lines in the mid as one insert.)
 ✔️ file- details needs to show role of the username (editor, owner)
 ✔️ creating a new file
 ✔️ sends the same content from data base to more than 1 time - check lock on db && lock file when writing in to it
@@ -68,3 +71,7 @@ check on:
 
 1. https://www.geeksforgeeks.org/longest-common-subsequence-dp-4/
 2. https://interviewing.io/questions/longest-common-subsequence
+
+
+logic explain:
+- if using insert need to send the line above where it is supposed to be

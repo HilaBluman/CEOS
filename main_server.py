@@ -358,6 +358,8 @@ def handle_client(client_socket, client_address, num_thread):
                             print(f"trying: {modification['row']}, {modification['action']}, {modification['content']}, {file_path} ")
                             modification['action'] = modify_file(modification['row'], modification['action'], modification['content'], file_path)
                             msg = "File modified successfully."
+                            if(modification['action'] == "paste"):
+                                modification["content"] = modification["content"] + "\n"
                             # Log the change only if successful
                             change_log_db.add_modification(file_id, modification, user_id)  
                         except Exception as e:
