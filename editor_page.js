@@ -1012,7 +1012,7 @@ async function loadFileDetails() {
         const isOwner = data.owner_id === parseInt(userID);
         
         // Show/hide user management controls based on ownership
-        const userManagementControls = document.querySelectorAll('#username-action, #add-user-btn');
+        const userManagementControls = document.querySelectorAll('#username-action, #grant-user-btn, #revoke-user-btn');
         userManagementControls.forEach(control => {
             control.style.display = isOwner ? 'block' : 'none';
         });
@@ -1049,10 +1049,6 @@ async function loadFileDetails() {
         // Add event listener for closing the panel
         document.getElementById('close-panel-btn').onclick = () => {
             document.getElementById('file-details').classList.remove('slide-in');
-        document.getElementById('add-user-btn').onclick = () => {
-            addUser(document.getElementById('username-action'));
-        }
-            
         };
 
     } catch (error) {
@@ -1061,39 +1057,6 @@ async function loadFileDetails() {
     }
 }
 
-
-
-
-
-
-
-async function sendToPollingServer(endpoint, method = 'GET', headers = {}, body = null) {
-    try {
-        const response = await fetch(polling_url + endpoint, {
-            method: method,
-            headers: {
-                'Content-Type': 'application/json',
-                ...headers
-            },
-            body: body ? JSON.stringify(body) : null
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return await response.json();
-    } catch (error) {
-        console.error('Error sending request to polling server:', error);
-        throw error;
-    }
-}
-
-// Example usage:
-// To send a request to the polling server:
-// const result = await sendToPollingServer('/some-endpoint', 'POST', { 'custom-header': 'value' }, { data: 'some data' });
-
-// end
 
 function hasValidExtension(filename) {
     if (!filename) return false;
@@ -1104,5 +1067,120 @@ function hasValidExtension(filename) {
     return validExtensions.includes(extension.toLowerCase());
 }
 
+async function accessUser(usernameInput,request) {
+    const username = usernameInput.value.trim();
+    if (!username) {
+        alert('Please enter a username');
+        return;
+    }
+    let prompt;
 
+    if (request === "granted"){
+        prompt = '/grant-user-to-file';
+    }
+    else{
+        prompt ='/revoke-user-to-file';
+    }
+
+    try {
+        // Add user to file
+        const response = await fetch(prompt, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ username, fileID }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification('Access ' + request + ' successfuly! the user needs to refresh the files!', 'success');
+            usernameInput.value = ''; // Clear the input
+            loadFileDetails(); // Refresh the user list
+        } else {
+            showNotification(data.message, 'error');
+        }
+        
+    } catch (error) {
+        console.error('Error :', error);
+        showNotification(error.message, 'error');
+    }
+}
+
+// Add event listener for the add user button
+document.addEventListener('DOMContentLoaded', () => {
+    const grantUserBtn = document.getElementById('grant-user-btn');
+    const usernameInput = document.getElementById('username-action');
+    
+    if (grantUserBtn && usernameInput) {
+        grantUserBtn.addEventListener('click', () => accessUser(usernameInput, "granted"));
+    }
+});
+
+// Add event listener for the add user button
+document.addEventListener('DOMContentLoaded', () => {
+    const revokeUserBtn = document.getElementById('revoke-user-btn');
+    const usernameInput = document.getElementById('username-action');
+    
+    if (revokeUserBtn && usernameInput) {
+        revokeUserBtn.addEventListener('click', () => accessUser(usernameInput, "revoked"));
+    }
+});
+
+
+function showNotification(message, type = 'info') {
+    const notification = document.getElementById('notification');
+    notification.className = `notification ${type === 'success' ? 'success-notification' : 'error-notification'}`;
+    notification.innerText = message;
+    notification.style.display = 'block';
+    notification.style.opacity = '1';
+
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => {
+            notification.style.display = 'none';
+        }, 500);
+    }, 3000);
+}
+
+// Add event listener for the refresh button
+document.addEventListener('DOMContentLoaded', () => {
+    const refreshBtn = document.getElementById('refresh-files');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            // Add rotation animation
+            refreshBtn.style.transform = 'rotate(360deg)';
+            refreshBtn.style.transition = 'transform 0.5s ease';
+            
+            // Refresh the files list
+            const filesInfo = await GetUserFiles(userID);
+            populateFileLists(filesInfo);
+            
+            // Check if current file is still accessible
+            if (fileID) {
+                const currentFileExists = filesInfo.fileIds.includes(parseInt(fileID));
+                if (!currentFileExists) {
+                    // User no longer has access to the current file
+                    showNotification('You no longer have access to this file', 'error');
+                    // Clear the editor
+                    codeEditor.setValue('');
+                    // Clear the current file tab
+                    const currentFileTab = document.getElementById('current-file-tab');
+                    currentFileTab.textContent = '';
+                    currentFileTab.classList.remove('active-tab');
+                    // Reset fileID
+                    fileID = 0;
+                    // Stop polling for updates
+                    stopPolling();
+                }
+            }
+            
+            // Reset rotation after animation
+            setTimeout(() => {
+                refreshBtn.style.transform = '';
+            }, 500);
+        });
+    }
+});
 

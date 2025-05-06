@@ -550,6 +550,27 @@ def handle_client(client_socket, client_address, num_thread):
                         password = data.get('password')
                         response = user_db.login(username, password)
                         client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+                    
+                    elif "/grant-user-to-file" in headers_data:
+                        #print("headers_data: " + headers_data)
+                        body = client_socket.recv(content_length).decode()
+                        data = json.loads(body)
+                        fileID = data.get('fileID')
+                        username = data.get('username')
+                        userID = user_db.get_user_id(username)
+                        response = file_permissions_db.grant_access(fileID,userID)
+                        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+
+                    elif "/revoke-user-to-file" in headers_data:
+                        #print("headers_data: " + headers_data)
+                        body = client_socket.recv(content_length).decode()
+                        data = json.loads(body)
+                        fileID = data.get('fileID')
+                        username = data.get('username')
+                        userID = user_db.get_user_id(username)
+                        response = file_permissions_db.revoke_access(fileID,userID)
+                        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+
 
                     elif "/disconnection" in headers_data:
                         body = ""
@@ -566,46 +587,6 @@ def handle_client(client_socket, client_address, num_thread):
                             new_file(client_socket, PATH_TO_FOLDER, headers_data,content)
                         else:
                             client_socket.send(ready_to_send("400 Bad Request", "Broken pipe or No content"))
-                    
-                    elif "/add-user-to-file" in headers_data:
-                        try:
-                            file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
-                            if not file_id:
-                                raise ValueError("File ID not provided")
-
-                            # Get the request body
-                            content_length = int(get_header(client_socket, headers_data, r'Content-Length:\s*(\d+)'))
-                            body = client_socket.recv(content_length).decode()
-                            data = json.loads(body)
-                            new_username = data.get('username')
-
-                            if not new_username:
-                                raise ValueError("Username not provided")
-
-                            # Check if user exists
-                            user_id = user_db.get_user_id(new_username)
-                            if not user_id:
-                                response = ready_to_send("404 Not Found", json.dumps({"error": "User not found"}), "application/json")
-                                client_socket.send(response.encode())
-                                return
-
-                            # Add user to file permissions
-                            success = file_permissions_db.grant_access(file_id, user_id)
-                            if success:
-                                response = ready_to_send("200 OK", json.dumps({"success": "User added successfully"}), "application/json")
-                            else:
-                                response = ready_to_send("400 Bad Request", json.dumps({"error": "Failed to add user"}), "application/json")
-                            
-                            client_socket.send(response.encode())
-                        except Exception as e:
-                            print(f"Error in add-user-to-file: {str(e)}")
-                            error_response = json.dumps({"error": str(e)})
-                            response = ready_to_send("500 Internal Server Error", error_response, "application/json")
-                            client_socket.send(response.encode())
-                    else:
-                        print("Not valid action")
-                        raise ValueError("Not valid action")
-                        
 
 
                 except Exception as e:

@@ -10,6 +10,8 @@
 </head>
 
 <body> 
+  <!-- Notification -->
+  <div class="notification" id="notification"></div>
 
   <header class="top-bar">
         <div class="menu-icon">☰</div>
@@ -26,7 +28,10 @@
         <div id="username-display"></div> 
       </div>
       
-      <h3>Files</h3> 
+      <div class="files-header">
+        <h3>Files</h3>
+        <button id="refresh-files" class="refresh-btn" title="Refresh files">↻</button>
+      </div>
       <ul class="file-tree" id="file-tree">
         <!-- Files will be populated here -->
       </ul>
@@ -99,12 +104,13 @@
           <!-- User list will be added here -->
       </tbody>
   </table>
-  <input type="text" id="new-username" placeholder="Enter new username">
-  <button id="add-user-btn">Add User</button>
+  <input type="text" id="username-action" placeholder="Enter username">
+  <button id="grant-user-btn">Grant Access</button>
+  <button id="revoke-user-btn">Revoke Access</button>
   <button id="close-panel-btn">Close</button>
 </div>
 
-<!-- Add this inside the <body> tag of your existing HTML -->
+
   <div id="file-details" class="side-panel">
     <h2 id="file-name">File Name: <span id="filename"></span></h2>
     <h3>Users with Access:</h3>

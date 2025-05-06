@@ -42,27 +42,6 @@ width: 100%; /* Full width */
 }
 
 
-.resizer {
-  cursor: ew-resize; /* Change cursor on hover */
-  background: rgb(244, 149, 25); /* Change this for visual feedback */
-  width: 5px; /* Width of the resizer */
-  height: 100%; /* Full height */
-  position: absolute;
-  right: 0;
-  top: 0;
-  z-index: 10; /* Ensure it's on top */
-}
-
-.resize-handle {
-  width: 5px; /* or whatever width you prefer */
-  background-color: rgb(244, 149, 25);
-  cursor: col-resize;
-  position: absolute;
-  right: 0; /* Aligns it to the right edge of the right panel */
-  height: 100%; /* Full height of the right panel */
-  z-index: 100; /* Make sure it stays above other elements */
-}
-
 .platform {
   display: grid;
   grid-template-columns: 180px 1fr 80px;
@@ -412,4 +391,54 @@ th {
     border-radius: 4px;
     background-color: var(--primary);
     color: var(--text);
+}
+
+/* Notification */
+.notification {
+  position: fixed;
+  top: 60px; /* Below the top bar */
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 5px;
+  z-index: 1000; /* Ensure it appears above other elements */
+  transition: opacity 0.5s ease;
+  display: none; /* Hidden by default */
+}
+
+.success-notification {
+  background-color: #2ecc71; /* Green background */
+  color: white; /* White text */
+}
+
+.error-notification {
+  background-color: #FF4C4C; /* Red background */
+  color: white; /* White text */
+}
+
+.files-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10px;
+    margin-bottom: 10px;
+}
+
+.refresh-btn {
+    background: none;
+    border: none;
+    font-size: 1.2em;
+    cursor: pointer;
+    padding: 5px;
+    color: #666;
+    transition: color 0.3s ease;
+}
+
+.refresh-btn:hover {
+    color: #fff;
+}
+
+.refresh-btn:active {
+    transform: rotate(180deg);
+    transition: transform 0.3s ease;
 }

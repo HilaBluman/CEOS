@@ -269,8 +269,14 @@ class FilePermissionsDatabase:
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
+        # Check if user has access using the has_access method
+        if not self.has_access(fileID, userID):
+            conn.close()
+            return {'status': 400, 'message': 'User does not have access to this file.'}
+        
         cursor.execute('DELETE FROM filePermissions WHERE fileID = ? AND userID = ?', (fileID, userID))
         conn.commit()
+        conn.close()
         return {'status': 200, 'message': 'Access revoked successfully.'}
 
     def get_user_access_files(self, userID):
