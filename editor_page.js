@@ -250,25 +250,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadInitialFile();
 });
 
-async function handlePaste(event) {
-    isPaste = true;    
-    const pastedData = (event.clipboardData || window.clipboardData).getData('text');
-    let linesArray = pastedData.split('\n');
 
-    const lastLineNumber = codeEditor.getSelection().startLineNumber;
-    const lastLineContent = codeEditor.getModel().getLineContent(lastLineNumber)
-    const firstLineNumber = lastLineNumber - linesArray.length + 1;
-    //hendle pasting in line no matter what
-    linesArray.shift();
-    linesArray[linesArray.length - 1] = lastLineContent;
-    const startLineNumber = codeEditor.getSelection().startLineNumber;
-    // Log the line number where the paste occurred
-    console.log("Pasted at line number:", startLineNumber);
-    const contentPaste = linesArray.join("\n");
-    await sendModifiction(contentPaste, firstLineNumber, "insert", 0)
-    console.log('Pasted data:', linesArray);
-    isPaste = false;
-};
 
 function recognizEnterKey(event) {
     if (event.key === 'Enter') {
@@ -310,7 +292,6 @@ useCodeEditor((editor) => {
                 const startLineNumber = change.range.startLineNumber; // Starting line number of the change
                 const endLineNumber = change.range.endLineNumber;     // Ending line number of the change
                 const changedText = change.text;                      // The new text that was inserted or replaced
-                //const isPaste = changedText.includes('\n');          // Check if the change is a paste operation
                 const isDelete = changedText === '';                 // Check if the change is a delete operation
 
                 // Get the current content of the editor
@@ -321,33 +302,32 @@ useCodeEditor((editor) => {
                 let action  = "update";
                 
                 if (isEnter){
-                    console.log("line enter: " + lines[startLineNumber])
+                    isEnter = false;
                     if (lines[startLineNumber] === ""){
-                        console.log("newline")
                         await sendModifiction("",startLineNumber, "insert", lines.length);
                     }
                     else{
+                        console.log("in enter 2")
                         await sendModifiction(lines[startLineNumber] ,startLineNumber, "insert", lines.length);
                         await sendModifiction(lines[startLineNumber - 1], startLineNumber - 1, "update", lines.length);
                     }
-                    isEnter = false;
                 }
 
                 else if (isDelete) {
                     if (isHighlighted){
                         isHighlighted = false;
-                        DeleteHighlighted(startLineNumber -1, endLineNumber - 1)
+                        console.log(startLineNumber  + " - " + endLineNumber)
+                        console.log(lines[startLineNumber - 1]+ " " + startLineNumber)
+                        await sendModifiction(endLineNumber - 1, startLineNumber - 1, "delete highlighted", 0 );
+                        await sendModifiction(lines[startLineNumber - 1] , startLineNumber - 1, "update", 0);
                     }
-                    // delete in the same line  
-                    const content = lines[startLineNumber - 1];
-                    const modification = JSON.stringify({
-                        content: content,                      // The content of the first line
-                        row: startLineNumber - 1,               // Convert to 0-based index
-                        action: 'delete same line',                       // Action type (update)
-                        lineLength: content.length               // Total number of lines in the editor
-                    });
-                    saveInput(modification);
-
+                    else{
+                        // delete in the same line 
+                        // Check if the delete is at the start of the row
+                        action = 'delete same line';                 
+                        
+                        await sendModifiction(lines[startLineNumber - 1], startLineNumber - 1, action, lines.length)
+                    }
                 } 
                 else{
                     // Handle single-line updates
@@ -357,7 +337,7 @@ useCodeEditor((editor) => {
                         content: firstline,          // The content of the first line of the change
                         row: startLineNumber - 1,   // Convert to 0-based index
                         action: action,             // Action type (update)
-                        lineLength: firstline.length   // Total number of lines in the editor
+                        linesLength: lines.length   // Total number of lines in the editor
                     });
 
                     // Log the modification for debugging
@@ -372,15 +352,35 @@ useCodeEditor((editor) => {
     });
 });
 
-async function sendModifiction (content, row, action, lineLength) {
+async function sendModifiction (content, row, action, linesLength) {
     const modification = JSON.stringify({
         content: content,          // The content of the first line of the change
         row: row,   // Convert to 0-based index
         action: action,             // Action type (update)
-        lineLength: lineLength   // Total number of lines in the editor
+        linesLength: linesLength   // Total number of lines in the editor
     });
     await saveInput(modification);
 }
+
+async function handlePaste(event) {
+    isPaste = true;    
+    const pastedData = (event.clipboardData || window.clipboardData).getData('text');
+    let linesArray = pastedData.split('\n');
+
+    const lastLineNumber = codeEditor.getSelection().startLineNumber;
+    const lastLineContent = codeEditor.getModel().getLineContent(lastLineNumber)
+    const firstLineNumber = lastLineNumber - linesArray.length + 1;
+    //handle pasting in line no matter what
+    linesArray.shift();
+    linesArray[linesArray.length - 1] = lastLineContent;
+    const startLineNumber = codeEditor.getSelection().startLineNumber;
+    // Log the line number where the paste occurred
+    //console.log("Pasted at line number:", startLineNumber);
+    const contentPaste = linesArray.join("\n");
+    await sendModifiction(contentPaste, firstLineNumber, "insert", 0)
+    //console.log('Pasted data:', linesArray);
+    isPaste = false;
+};
 
 document.getElementById('username-display').textContent = get_username();
 document.getElementById('username-avater').textContent = get_username().charAt(0).toUpperCase();
@@ -407,15 +407,6 @@ function changeEditorLanguage(extension) {
     }
 }
 
-async function DeleteHighlighted(start, fin ) {  
-    //console.log("Delete - start: " + start + " fin: " + fin)
-    const action = 'delete'
-    for(let i = fin; i > start; i--){
-        const modification = JSON.stringify({ content: "", row: i, action, lineLength: 0 });
-        saveInput(modification)   // await saveInput(modification)
-    }
-    codeEditor.focus();
-}
 
 // Helper Functions
 function pageHide(event){
@@ -457,7 +448,7 @@ async function onDocumentKeySave(event) {
 // Core Functions
 async function saveAll() {
     const code = codeEditor.getValue();
-    const modification = JSON.stringify({ content: code, row: 1, action: 'saveAll', lineLength: code.split("\n").length });
+    const modification = JSON.stringify({ content: code, row: 1, action: 'saveAll', linesLength: code.split("\n").length });
     await saveInput(modification)
     Pasting = false;
 }
@@ -1017,6 +1008,15 @@ async function loadFileDetails() {
         // Update the filename
         document.getElementById('filename').textContent = data.filename;
 
+        // Check if current user is the owner
+        const isOwner = data.owner_id === parseInt(userID);
+        
+        // Show/hide user management controls based on ownership
+        const userManagementControls = document.querySelectorAll('#username-action, #add-user-btn');
+        userManagementControls.forEach(control => {
+            control.style.display = isOwner ? 'block' : 'none';
+        });
+
         if (Array.isArray(data.users)) {
             // Clear existing table content
             const userList = document.getElementById('user-list');
@@ -1049,6 +1049,10 @@ async function loadFileDetails() {
         // Add event listener for closing the panel
         document.getElementById('close-panel-btn').onclick = () => {
             document.getElementById('file-details').classList.remove('slide-in');
+        document.getElementById('add-user-btn').onclick = () => {
+            addUser(document.getElementById('username-action'));
+        }
+            
         };
 
     } catch (error) {
@@ -1056,7 +1060,6 @@ async function loadFileDetails() {
         alert('Error loading file details');
     }
 }
-
 
 
 

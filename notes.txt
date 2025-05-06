@@ -8,23 +8,24 @@ create:
 
 
 applyUpdate bugs:
+⚪️ handle 'update and delete row below' 
 ✔️ deleting a line (not highlight) - an empty line 
-✔️ hendle delete 
-✔️ hendle pasting -(have a problam with saving paste) when pasting more then 1 line it replaces the lines below (one line good)
-✔️ fix pasting logic - hendle receiving all the lines in the mid as one insert.
-⚪️ fixed problam in file so check = when highlighting a content and pasting (more them 1 row) the last row does not load properly
-✔️ hendle a new row
+✔️ handle delete 
+✔️ handle pasting -(have a problam with saving paste) when pasting more then 1 line it replaces the lines below (one line good)
+✔️ fix pasting logic - handle receiving all the lines in the mid as one insert.
+⚪️ fixed problam in file so check/ = when highlighting a content and pasting (more them 1 row) the last row does not load properly
+✔️ handle a new row
 ⚪️ new row in a mid of chacters - enters paste (problam in hendling - the other client & server is not getiing the right content)
 ✔️ new row end of file
-✔️ hendle writing in the last row
+✔️ handle writing in the last row
 
 bugs:
 
 important:
-⚪️ delete at the start of a line
+✔️ delete at the start of a line
 ✔️ paste listener check if in mid of row if not sends addPaste if it does send the mid content and update the lines
-⚪️ fix delte highlighted - deletes all the lines except the line one before the last one when delete row and a little bit.
-⚪️ when highlighting a content and pasting (more them 1 row) the last row does not load properly
+✔️ fix delte highlighted - deletes all the lines except the line one before the last one when delete row and a little bit.
+✔️ when highlighting a content and pasting (more them 1 row) the last row does not load properly
 ⚪️ have a problam with cmd/crl z
 ⚪️ handle delete file
 
@@ -32,6 +33,7 @@ important:
 less significant:
 * what is async??? (read about it)
 * whats the point of lineLegth????
+⚪️ add a refresh to the file tree
 ⚪️ fix resizing - so right panle will show all ways
 ⚪️ the icon is not loading
 

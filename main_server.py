@@ -208,7 +208,7 @@ def get_countent_len(client_socket, headers_data):
     return match.group(1)
 
 
-def modify_file(row, action, content, file_path):
+def modify_file(row, action, content, file_path, linesLength):
     try:
         with open(file_path, 'r+', encoding='utf-8', newline=None) as file:
             # Lock the file for writing
@@ -218,12 +218,20 @@ def modify_file(row, action, content, file_path):
 
             # Checking if an empty line has been deleted
             if action == 'delete same line':
-                if content == lines[row].replace("\n",""):
+                #print("lineslength: " + str(len(lines)))
+                if len(lines) > linesLength:
+                    action = 'update and delete row below'
+                elif content == lines[row].replace("\n",""):
                     action = 'delete row below'
                 else:
                     action = 'update'
 
-            if action == 'saveAll':
+                
+            if action == "delete highlighted":
+                for i in range(content,row - 1, -1):  # content is used as the end of the delete
+                    del lines[i]
+
+            elif action == 'saveAll':
                 lines.clear()
                 lines = content
 
@@ -253,6 +261,10 @@ def modify_file(row, action, content, file_path):
                     lines[row] = content + "\r"
                 else:
                     raise ValueError("Row number is out of bounds.")
+            elif action == "update and delete row below":
+                    print("in update and delete row below")
+                    del lines[row + 1]
+                    lines[row] = content + "\r"
             else:
                 raise ValueError("Invalid action.")
 
@@ -356,7 +368,7 @@ def handle_client(client_socket, client_address, num_thread):
                                 
                         try:
                             print(f"trying: {modification['row']}, {modification['action']}, {modification['content']}, {file_path} ")
-                            modification['action'] = modify_file(modification['row'], modification['action'], modification['content'], file_path)
+                            modification['action'] = modify_file(modification['row'], modification['action'], modification['content'], file_path, modification['linesLength'])
                             msg = "File modified successfully."
                             if(modification['action'] == "paste"):
                                 modification["content"] = modification["content"] + "\n"
@@ -387,7 +399,8 @@ def handle_client(client_socket, client_address, num_thread):
                         # Prepare response data
                         response_data = {
                             "filename": file_details['filename'],
-                            "users": users_with_access
+                            "users": users_with_access,
+                            "owner_id": file_details['owner_id']
                         }
                         response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
                         client_socket.send(response.encode())
