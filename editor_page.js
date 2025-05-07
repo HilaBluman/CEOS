@@ -146,9 +146,9 @@ async function initializeEditor() {
             
 
         isEditorReady = true;
-
         const event = new Event('editorReady');
         window.dispatchEvent(event);
+        codeEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, onKeyZ);
         resolve();
         });
     });
@@ -178,7 +178,6 @@ let previousContent = '';
 let timeoutId;
 let isEnter = false;
 let isPaste = false;
-let Pasting = false;
 let isHighlighted = false;
 let Loadeing = false;
 let isDelete = false;
@@ -195,6 +194,8 @@ let startWidth;
 let rightPanel;
 let mainSection;
 
+
+let crlZ = false;
 
 
 function onDocumentMouseMove(e) {
@@ -257,6 +258,7 @@ function recognizEnterKey(event) {
         console.log('Enter key pressed!');
         isEnter = true; 
     }
+
 }
 
 document.addEventListener('paste', handlePaste)
@@ -268,6 +270,7 @@ document.addEventListener('keydown', onDocumentKeySave);
 
 document.addEventListener('selectionchange', isTextHighlighted);
 window.addEventListener("pagehide", pageHide);
+
 
 
 
@@ -297,6 +300,11 @@ useCodeEditor((editor) => {
                 // Get the current content of the editor
                 const fullContent = editor.getValue();
                 const lines = fullContent.split('\n');
+
+                if (crlZ){
+                    console.log("chnages: " + changedText);
+                    crlZ = false;
+                }
 
                 // Determine the action based on the type of change
                 let action  = "update";
@@ -341,7 +349,7 @@ useCodeEditor((editor) => {
                     });
 
                     // Log the modification for debugging
-                    console.log('Modification:', modification);
+                    //console.log('Modification:', modification);
 
                     // Call saveInput with the modification
                     saveInput(modification);
@@ -430,12 +438,17 @@ function pageHide(event){
     });
 }
 
-function onKeyZ(event){
-    if (event.metaKey && event.key === 'z') {
-        console.log("cmd z")
+function onKeyZ(event) {
+    console.log('Undo shortcut pressed (Ctrl+Z or Cmd+Z)');
+    for (const change of event.changes){
+        let changedText = change.text;
+        if (changedText.includes('\n')){
+            setTimeout(() => {
+            saveAll();
+            }, 2000);
+        }
     }
 }
-
 
 async function onDocumentKeySave(event) {
     if ((event.ctrlKey || event.metaKey) && event.key === 's') {
@@ -450,7 +463,7 @@ async function saveAll() {
     const code = codeEditor.getValue();
     const modification = JSON.stringify({ content: code, row: 1, action: 'saveAll', linesLength: code.split("\n").length });
     await saveInput(modification)
-    Pasting = false;
+    Loadeing = false;
 }
 
 async function saveInput(modification) {
@@ -639,7 +652,7 @@ async function createNewFile(filename) {
 
             if (response.status === 409) {
                 // File already exists
-                alert('A file with this name already exists. Please choose a different name.');
+                showNotification('A file with this name already exists. Please choose a different name.', 'error');
                 return;
             }
 
@@ -675,7 +688,7 @@ async function createNewFile(filename) {
 
         } catch (error) {
             console.error('Error creating new file:', error);
-            alert('Failed to create new file. Please try again.');
+            showNotification('Failed to create new file. Please try again.', 'error');
         }
 }
 
@@ -939,9 +952,10 @@ function promptUploadFile() {
             await uploadNewFile(content, filename);
             
             console.log('File upload completed:', filename);
+            showNotification('File upload completed!','success')
         } catch (error) {
             console.error('Error during file upload:', error);
-            alert('Error uploading file: ' + error.message);
+            showNotification(error.message, 'error');
         } finally {
             // Clean up the file input
             document.body.removeChild(fileInput);
@@ -972,7 +986,7 @@ document.addEventListener('click', (e) => {
 
 function popFileInfo() {
     if (!fileID || !selectedFileName) {
-        alert('Please select a file first');
+        showNotification('Please select a file first', 'error');
         return;
     }
 
@@ -1053,7 +1067,7 @@ async function loadFileDetails() {
 
     } catch (error) {
         console.error('Error loading file details:', error);
-        alert('Error loading file details');
+        showNotification(error.message, 'error');
     }
 }
 
@@ -1070,7 +1084,7 @@ function hasValidExtension(filename) {
 async function accessUser(usernameInput,request) {
     const username = usernameInput.value.trim();
     if (!username) {
-        alert('Please enter a username');
+        showNotification('Please enter a username', 'error');;
         return;
     }
     let prompt;
