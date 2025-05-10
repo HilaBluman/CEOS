@@ -217,18 +217,17 @@ def modify_file(row, action, content, file_path, linesLength):
             lines = file.readlines()  # Read all lines into a list
 
             # Checking if an empty line has been deleted
-            if action == 'delete same line':
-                #print("lineslength: " + str(len(lines)))
+            if action == 'delete same line' or action == "Z update":
+                print("lineslength: " + str(len(lines)))
                 if len(lines) > linesLength:
+                    print('update and delete ')
                     action = 'update and delete row below'
-                elif content == lines[row].replace("\n",""):
-                    action = 'delete row below'
                 else:
                     action = 'update'
 
                 
             if action == "delete highlighted":
-                for i in range(content,row - 1, -1):  # content is used as the end of the delete
+                for i in range(content - 1,row - 1, -1):  # content is used as the end of the delete
                     del lines[i]
 
             elif action == 'saveAll':
@@ -253,7 +252,7 @@ def modify_file(row, action, content, file_path, linesLength):
                     print("enter in mid of line ")
                     lines.insert(row, content + "\r")
 
-            elif action == 'update' or action == 'delete row below':
+            elif action == 'update':
                 if row == len(lines):
                     lines.insert(row, content)
                 elif 0 <= row < len(lines):
@@ -261,6 +260,7 @@ def modify_file(row, action, content, file_path, linesLength):
                     lines[row] = content + "\r"
                 else:
                     raise ValueError("Row number is out of bounds.")
+                
             elif action == "update and delete row below":
                     print("in update and delete row below")
                     del lines[row + 1]
@@ -370,7 +370,7 @@ def handle_client(client_socket, client_address, num_thread):
                             print(f"trying: {modification['row']}, {modification['action']}, {modification['content']}, {file_path} ")
                             modification['action'] = modify_file(modification['row'], modification['action'], modification['content'], file_path, modification['linesLength'])
                             msg = "File modified successfully."
-                            if(modification['action'] == "paste"):
+                            if modification['action'] in ["paste", "update delete row below"]:
                                 modification["content"] = modification["content"] + "\n"
                             # Log the change only if successful
                             change_log_db.add_modification(file_id, modification, user_id)  

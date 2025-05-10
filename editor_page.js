@@ -148,7 +148,11 @@ async function initializeEditor() {
         isEditorReady = true;
         const event = new Event('editorReady');
         window.dispatchEvent(event);
-        codeEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, onKeyZ);
+        codeEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, () => {
+            undoTriggered = true;
+            console.log('Undo shortcut pressed (Ctrl+Z or Cmd+Z)');
+            codeEditor.trigger('keyboard', 'undo', null);
+        });
         resolve();
         });
     });
@@ -195,7 +199,7 @@ let rightPanel;
 let mainSection;
 
 
-let crlZ = false;
+let undoTriggered = false;
 
 
 function onDocumentMouseMove(e) {
@@ -255,7 +259,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function recognizEnterKey(event) {
     if (event.key === 'Enter') {
-        console.log('Enter key pressed!');
         isEnter = true; 
     }
 
@@ -299,60 +302,45 @@ useCodeEditor((editor) => {
 
                 // Get the current content of the editor
                 const fullContent = editor.getValue();
-                const lines = fullContent.split('\n');
-
-                if (crlZ){
-                    console.log("chnages: " + changedText);
-                    crlZ = false;
-                }
+                let lines = fullContent.split('\n');
 
                 // Determine the action based on the type of change
                 let action  = "update";
-                
-                if (isEnter){
+
+                if (undoTriggered){
+                    console.log("changes: " + changedText);
+                    onKeyZ(change, lines);
+                }
+                else if (isHighlighted){
+                    isHighlighted = false;
+                    await sendModifiction(endLineNumber, startLineNumber , "delete highlighted", 0 );
+                    await sendModifiction(lines[startLineNumber - 1] , startLineNumber - 1, "update", 0);
+                    console.log("end of highlighted")
+                }
+                else if (isEnter){
                     isEnter = false;
                     if (lines[startLineNumber] === ""){
                         await sendModifiction("",startLineNumber, "insert", lines.length);
                     }
                     else{
-                        console.log("in enter 2")
                         await sendModifiction(lines[startLineNumber] ,startLineNumber, "insert", lines.length);
                         await sendModifiction(lines[startLineNumber - 1], startLineNumber - 1, "update", lines.length);
                     }
                 }
 
                 else if (isDelete) {
-                    if (isHighlighted){
-                        isHighlighted = false;
-                        console.log(startLineNumber  + " - " + endLineNumber)
-                        console.log(lines[startLineNumber - 1]+ " " + startLineNumber)
-                        await sendModifiction(endLineNumber - 1, startLineNumber - 1, "delete highlighted", 0 );
-                        await sendModifiction(lines[startLineNumber - 1] , startLineNumber - 1, "update", 0);
-                    }
-                    else{
                         // delete in the same line 
                         // Check if the delete is at the start of the row
                         action = 'delete same line';                 
-                        
+                        lines = lines.map(line => line.replace(/\n$/, ''));
+                        if (lines[lines.length - 1] === '') {
+                            lines.pop();
+                        }
+                        console.log(lines.length)
                         await sendModifiction(lines[startLineNumber - 1], startLineNumber - 1, action, lines.length)
-                    }
-                } 
+                 } 
                 else{
-                    // Handle single-line updates
-                    const firstline = lines[startLineNumber - 1]; // Lines are 1-indexed in Monaco
-                    // Create the modification object
-                    const modification = JSON.stringify({
-                        content: firstline,          // The content of the first line of the change
-                        row: startLineNumber - 1,   // Convert to 0-based index
-                        action: action,             // Action type (update)
-                        linesLength: lines.length   // Total number of lines in the editor
-                    });
-
-                    // Log the modification for debugging
-                    //console.log('Modification:', modification);
-
-                    // Call saveInput with the modification
-                    saveInput(modification);
+                    await sendModifiction(lines[startLineNumber - 1] , startLineNumber - 1, "update", 0);
                 }
                 
             }
@@ -385,7 +373,7 @@ async function handlePaste(event) {
     // Log the line number where the paste occurred
     //console.log("Pasted at line number:", startLineNumber);
     const contentPaste = linesArray.join("\n");
-    await sendModifiction(contentPaste, firstLineNumber, "insert", 0)
+    await sendModifiction(contentPaste, firstLineNumber, "paste", 0)
     //console.log('Pasted data:', linesArray);
     isPaste = false;
 };
@@ -438,16 +426,28 @@ function pageHide(event){
     });
 }
 
-function onKeyZ(event) {
+async function onKeyZ(change, lines) {
     console.log('Undo shortcut pressed (Ctrl+Z or Cmd+Z)');
-    for (const change of event.changes){
-        let changedText = change.text;
-        if (changedText.includes('\n')){
-            setTimeout(() => {
-            saveAll();
-            }, 2000);
-        }
+    console.log(change)
+    // Handle custom behavior
+    /*if (change.range['startLineNumber'] === change.range['endLineNumber']){
+        console.log("singel line")
+        // send the line update, the row, the content in the row and so on
+        await sendModifiction(lines[change.range['startLineNumber'] - 1] , change.range['startLineNumber'] - 1, "Z update", lines.length);
     }
+    else{
+        console.log("mul line")
+        await sendModifiction(change.range['endLineNumber'] - 1, change.range['startLineNumber'] , "delete highlighted", 0 );
+        await sendModifiction(change["text"] , change.range['startLineNumber'] - 1, "update", 0);
+    }*/
+   let text = change["text"];
+    if (lines[change.range['startLineNumber'] - 1] !== ""){
+        console.log(lines[change.range['startLineNumber'] - 1]);
+        text = lines[change.range['startLineNumber'] - 1];
+    }
+    await sendModifiction(change.range['endLineNumber'] - 1, change.range['startLineNumber'] , "delete highlighted", 0 );
+    await sendModifiction(change["text"] , change.range['startLineNumber'] - 1, "update", 0);
+    undoTriggered = false;
 }
 
 async function onDocumentKeySave(event) {
@@ -462,6 +462,7 @@ async function onDocumentKeySave(event) {
 async function saveAll() {
     const code = codeEditor.getValue();
     const modification = JSON.stringify({ content: code, row: 1, action: 'saveAll', linesLength: code.split("\n").length });
+    console.log("saveAll")
     await saveInput(modification)
     Loadeing = false;
 }
@@ -785,13 +786,24 @@ function getRangeAndContent(update) {
     let range;
 
     //checking if a empty line has been deleted
-    if(action == "delete row below"){
+    /*if(action == "delete row below"){
        action = "delete";
         row  = row + 1;
-    }
+    }*/
+   const linesCount = model.getLineCount();
 
-    // Handle new line at the end of file
-    if (content.startsWith("\n") && action === "update" && row === model.getLineCount()){
+    if (action === "delete highlighted") { // must first if
+        // For delete highlighted action, we need to create a range that represents the highlighted lines
+        // The start is the row, and the end is the last line of the content.
+        range = new monaco.Range(
+            row,            // Convert 0-based to 1-based
+            1,              // Start at beginning of line
+            content + 1,         // the end of the delete is in content 
+            1               // End at beginning of the last line
+        );
+        content = "";       // Empty content to remove the lines
+    } else if (content.startsWith("\n") && action === "update" && row === model.getLineCount()){
+        // Handle new line at the end of file
         range = new monaco.Range(
             update.row + 1,  // Next line
             1,              // Start at beginning of line
@@ -801,10 +813,10 @@ function getRangeAndContent(update) {
         content = ""; // Empty content for new line
     } else if (action === "insert" || action === "paste") {
         // For insert action, we need to create a range that represents a new line
-        // saves the spaces is there is.
-        if(content.replace(/ /g, "") === "" && content !== "\n"){
-            content = content + "\n";
-        }
+        // make sure it has a a "\n" at the end.
+            if (! content.endsWith("\n")){
+                content = content + "\n";
+            }
 
         range = new monaco.Range(
             row,  // Convert 0-based to 1-based
@@ -821,7 +833,7 @@ function getRangeAndContent(update) {
             1               // Start of next line
         );
         content = "";       // Empty content to remove the line
-    } else if (action == "update") {
+    } else if (action === "update") {
         // For update action (including deletions within the same row)
         range = new monaco.Range(
             row,  // Convert 0-based to 1-based
@@ -829,7 +841,22 @@ function getRangeAndContent(update) {
             row,            // Same line
             model.getLineContent(row).length + 1  // End at end of current line
         );
-    } else { //change becuse the action is not the right one
+    }else if(action === "saveAll"){
+        range = new monaco.Range(
+            1,  // Convert 0-based to 1-based
+            1,              // Start at beginning of line
+            model.getLineCount(),            // Last line
+            model.getLineContent(row).length + 1  // End at end of current line
+        );
+    } else if (action === "update and delete row below") {
+        // Adjust the range to include the next line for deletion
+        range = new monaco.Range(
+            row,            // Convert 0-based to 1-based
+            1,              // Start at beginning of line
+            row + 2,        // Next line after the one to be deleted
+            1               // Start of the line after the one to be deleted
+        );
+    }else { //change becuse the action is not the right one
         console.log("action not acceptable.")
     }
 
