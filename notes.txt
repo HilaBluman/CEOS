@@ -7,7 +7,7 @@ create:
 
 applyUpdate:
 ✔️ handle delete highlighted
-⚪️ delete at the end of an empty line it connects the line above and below the deleted line
+⚪️ delete empty line it connects the line above and below the deleted line
 ⚪️ if end of file line (end of the file + 1) update add a line 
 ✔️ handle saveAll
 ✔️ handle 'update and delete row below' 
@@ -15,7 +15,7 @@ applyUpdate:
 ✔️ handle delete 
 ✔️ handle pasting -(have a problam with saving paste) when pasting more then 1 line it replaces the lines below (one line good)
 ✔️ fix pasting logic - handle receiving all the lines in the mid as one insert.
-⚪️ problam in file  = when highlighting a content and pasting (more them 1 row) the last row does not load properly
+✔️ problam in file  = when highlighting a content and pasting (more them 1 row) the last row does not load properly
 ✔️ handle a new row
 ✔️ new row in a mid of chacters - enters paste (problam in hendling - the other client & server is not getiing the right content)
 ✔️ new row end of file
@@ -25,23 +25,30 @@ applyUpdate:
 bugs:
 
 important:
-⚪️ delete the last line - fix
-⚪️ when highlighting a content and pasting 
+⚪️ delete the last line - fix (when empty it is teh real problam)
+✔️ when highlighting a content and pasting - one line highlight paste problam
+⚪️ when pasting "&lt;/&gt" because of & - fix
 ✔️ delete at the start of a line - does not work should be update and delete row below
 ✔️ paste listener check if in mid of row if not sends addPaste if it does send the mid content and update the lines
 ✔️ fix delete highlighted - deletes all the lines except the line one before the last one when delete row and a little bit.
 ✔️ when highlighting a content and pasting (more them 1 row) the last row does not load properly
-⚪️ fix in file - check the cmd/ctr z
+✔️ fix in file - check the cmd/ctr z
+⚪️ check the cmd/ctr z end cases
+✔️ problam cmd/ctr z -  cmd/ctr z, after pasting highlighted (but only part of the end and first line ) - it showes only the part that was paste on (instead)
 ✔️ when saving the next update deos not sends
 
 
 less significant:
 * what is async??? (read about it)
-* whats the point of lineLegth????
+* needs to be able to donwload files.
+
 ✔️ add a refresh to the file tree
 ⚪️ fix resizing - so right panle will show all ways
 ⚪️ the icon is not loading
 ⚪️ replaces the nodifctions to the good ones (red and green)
+⚪️ add viewer option
+⚪️ logout!!!
+⚪️ make a new folder for each user so there files will be stored there, use userID as the name of the folder.
 
 
 done:

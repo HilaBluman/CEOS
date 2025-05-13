@@ -7,6 +7,7 @@ import urllib.parse
 import fcntl
 from difflib import SequenceMatcher
 from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase
+import html
 # Create an instance at the start of your server
 DB_PATH = "/Users/hila/CEOs/users.db"
 user_db = UserDatabase(DB_PATH)
@@ -364,20 +365,28 @@ def handle_client(client_socket, client_address, num_thread):
 
                     else:
                         modification_data = urllib.parse.unquote(match1.group(1)) 
-                        modification = json.loads(modification_data)
-                                
                         try:
-                            print(f"trying: {modification['row']}, {modification['action']}, {modification['content']}, {file_path} ")
-                            modification['action'] = modify_file(modification['row'], modification['action'], modification['content'], file_path, modification['linesLength'])
-                            msg = "File modified successfully."
-                            if modification['action'] in ["paste", "update delete row below"]:
-                                modification["content"] = modification["content"] + "\n"
-                            # Log the change only if successful
-                            change_log_db.add_modification(file_id, modification, user_id)  
-                        except Exception as e:
-                            msg = f"Error modifying file: {str(e)}"
-                        print(msg)
-                        client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
+                            modification = json.loads(modification_data)
+                            print("modification:", modification)
+                            print("modification['content']:", modification['content'])
+
+                            content = modification['content'] 
+                            #print("content: ", content)
+                                
+                            try:
+                                print(f"trying: {modification['row']}, {modification['action']}, {content}, {file_path} ")
+                                modification['action'] = modify_file(modification['row'], modification['action'], content, file_path, modification['linesLength'])
+                                msg = "File modified successfully."
+                                if modification['action'] in ["paste", "update delete row below"]:
+                                    content = content + "\n"
+                                # Log the change only if successful
+                                change_log_db.add_modification(file_id, modification, user_id)  
+                            except Exception as e:
+                                msg = f"Error modifying file: {str(e)}"
+                            print(msg)
+                            client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
+                        except json.JSONDecodeError as e:
+                            print(f"JSON decode error: {e}")
                         
                 elif "/get-file-details" in headers_data:
                     try:
@@ -633,5 +642,4 @@ def start_main_server(host='127.0.0.1', port=8000):
 
         except Exception as e:
             print(f"Error accepting connection: {str(e)}")
-
 

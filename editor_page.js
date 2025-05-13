@@ -313,18 +313,18 @@ useCodeEditor((editor) => {
                 }
                 else if (isHighlighted){
                     isHighlighted = false;
-                    await sendModifiction(endLineNumber, startLineNumber , "delete highlighted", 0 );
-                    await sendModifiction(lines[startLineNumber - 1] , startLineNumber - 1, "update", 0);
+                    sendModifiction(endLineNumber, startLineNumber , "delete highlighted", 0 );
+                    sendModifiction(lines[startLineNumber - 1] , startLineNumber - 1, "update", 0);
                     console.log("end of highlighted")
                 }
                 else if (isEnter){
                     isEnter = false;
                     if (lines[startLineNumber] === ""){
-                        await sendModifiction("",startLineNumber, "insert", lines.length);
+                        sendModifiction("",startLineNumber, "insert", lines.length);
                     }
                     else{
-                        await sendModifiction(lines[startLineNumber] ,startLineNumber, "insert", lines.length);
-                        await sendModifiction(lines[startLineNumber - 1], startLineNumber - 1, "update", lines.length);
+                        sendModifiction(lines[startLineNumber] ,startLineNumber, "insert", lines.length);
+                        sendModifiction(lines[startLineNumber - 1], startLineNumber - 1, "update", lines.length);
                     }
                 }
 
@@ -349,12 +349,14 @@ useCodeEditor((editor) => {
 });
 
 async function sendModifiction (content, row, action, linesLength) {
+    // First escape any special characters in the content
     const modification = JSON.stringify({
-        content: content,          // The content of the first line of the change
-        row: row,   // Convert to 0-based index
-        action: action,             // Action type (update)
-        linesLength: linesLength   // Total number of lines in the editor
+        content: content,
+        row: row,
+        action: action,
+        linesLength: linesLength,
     });
+    
     await saveInput(modification);
 }
 
@@ -366,15 +368,11 @@ async function handlePaste(event) {
     const lastLineNumber = codeEditor.getSelection().startLineNumber;
     const lastLineContent = codeEditor.getModel().getLineContent(lastLineNumber)
     const firstLineNumber = lastLineNumber - linesArray.length + 1;
-    //handle pasting in line no matter what
     linesArray.shift();
     linesArray[linesArray.length - 1] = lastLineContent;
-    const startLineNumber = codeEditor.getSelection().startLineNumber;
-    // Log the line number where the paste occurred
-    //console.log("Pasted at line number:", startLineNumber);
     const contentPaste = linesArray.join("\n");
-    await sendModifiction(contentPaste, firstLineNumber, "paste", 0)
-    //console.log('Pasted data:', linesArray);
+    await sendModifiction(contentPaste, firstLineNumber, "paste", 0);
+    //await sendModifiction(contentPaste, codeEditor.getSelection().startLineNumber, "update", 0);
     isPaste = false;
 };
 
@@ -429,24 +427,22 @@ function pageHide(event){
 async function onKeyZ(change, lines) {
     console.log('Undo shortcut pressed (Ctrl+Z or Cmd+Z)');
     console.log(change)
+    let changeLines = change["text"].split("\n");
+    let startLine = change.range['startLineNumber'] - 1;
+    let endLine = changeLines.length + startLine - 1;
     // Handle custom behavior
-    /*if (change.range['startLineNumber'] === change.range['endLineNumber']){
-        console.log("singel line")
-        // send the line update, the row, the content in the row and so on
-        await sendModifiction(lines[change.range['startLineNumber'] - 1] , change.range['startLineNumber'] - 1, "Z update", lines.length);
+    if (lines[startLine] !== ""){
+        console.log(lines[startLine]);
+        changeLines[0] = lines[startLine];
     }
-    else{
-        console.log("mul line")
-        await sendModifiction(change.range['endLineNumber'] - 1, change.range['startLineNumber'] , "delete highlighted", 0 );
-        await sendModifiction(change["text"] , change.range['startLineNumber'] - 1, "update", 0);
-    }*/
-   let text = change["text"];
-    if (lines[change.range['startLineNumber'] - 1] !== ""){
-        console.log(lines[change.range['startLineNumber'] - 1]);
-        text = lines[change.range['startLineNumber'] - 1];
+    if(lines[endLine] !== ""){
+        console.log(lines[endLine]);
+        changeLines[changeLines.length - 1] = lines[endLine];
     }
-    await sendModifiction(change.range['endLineNumber'] - 1, change.range['startLineNumber'] , "delete highlighted", 0 );
-    await sendModifiction(change["text"] , change.range['startLineNumber'] - 1, "update", 0);
+
+    let text = changeLines.join("\n");
+    sendModifiction(change.range['endLineNumber'], change.range['startLineNumber'], "delete highlighted", 0);
+    sendModifiction(text, change.range['startLineNumber'] - 1, "update", 0);
     undoTriggered = false;
 }
 
@@ -470,13 +466,16 @@ async function saveAll() {
 async function saveInput(modification) {
 
     try {
+        // First stringify the modification, then encode it
         const encodedModification = encodeURIComponent(modification);
         const url = "/save?modification=" + encodedModification;
         const response = await fetch(url, {
             method: 'GET',
-            headers: { 'fileID': fileID,
+            headers: { 
+                'fileID': fileID,
                 "userID": userID,
-                'Connection': 'keep-alive'}
+                'Connection': 'keep-alive'
+            }
         });
 
         if (!response.ok) {
@@ -484,7 +483,6 @@ async function saveInput(modification) {
         }
 
         const result = await response.text();
-        //console.log('Save result:', result);
         await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
         console.error('Error saving file:', error);
