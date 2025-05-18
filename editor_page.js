@@ -851,7 +851,7 @@ function getRangeAndContent(update) {
         range = new monaco.Range(
             row,            // Convert 0-based to 1-based
             1,              // Start at beginning of line
-            row + 2,        // Next line after the one to be deleted
+            row + 1,        // Next line after the one to be deleted
             1               // Start of the line after the one to be deleted
         );
     }else { //change becuse the action is not the right one

@@ -7,8 +7,8 @@ create:
 
 applyUpdate:
 ✔️ handle delete highlighted
-⚪️ delete empty line it connects the line above and below the deleted line
-⚪️ if end of file line (end of the file + 1) update add a line 
+✔️ delete empty line it connects the line above and below the deleted line - fix was (in the next row colom i did row +1 insted of row + 2)
+⚪️ if end of file line (end of the file + 1) update add a line  - ?????
 ✔️ handle saveAll
 ✔️ handle 'update and delete row below' 
 ✔️ deleting a line (not highlight) - an empty line 
@@ -25,7 +25,8 @@ applyUpdate:
 bugs:
 
 important:
-⚪️ delete the last line - fix (when empty it is teh real problam)
+⚪️ regular back ups 
+⚪️ delete the last line - fix (when empty it is the real problam)
 ✔️ when highlighting a content and pasting - one line highlight paste problam
 ⚪️ when pasting "&lt;/&gt" because of & - fix
 ✔️ delete at the start of a line - does not work should be update and delete row below
@@ -45,7 +46,7 @@ less significant:
 ✔️ add a refresh to the file tree
 ⚪️ fix resizing - so right panle will show all ways
 ⚪️ the icon is not loading
-⚪️ replaces the nodifctions to the good ones (red and green)
+✔️ replaces the nodifctions to the good ones (red and green)
 ⚪️ add viewer option
 ⚪️ logout!!!
 ⚪️ make a new folder for each user so there files will be stored there, use userID as the name of the folder.
