@@ -27,32 +27,33 @@ bugs:
 important:
 ⚪️ regular back ups 
 ⚪️ delete the last line - fix (when empty it is the real problam)
-✔️ when highlighting a content and pasting - one line highlight paste problam
 ⚪️ when pasting "&lt;/&gt" because of & - fix
-✔️ delete at the start of a line - does not work should be update and delete row below
-✔️ paste listener check if in mid of row if not sends addPaste if it does send the mid content and update the lines
-✔️ fix delete highlighted - deletes all the lines except the line one before the last one when delete row and a little bit.
-✔️ when highlighting a content and pasting (more them 1 row) the last row does not load properly
-✔️ fix in file - check the cmd/ctr z
 ⚪️ check the cmd/ctr z end cases
-✔️ problam cmd/ctr z -  cmd/ctr z, after pasting highlighted (but only part of the end and first line ) - it showes only the part that was paste on (instead)
-✔️ when saving the next update deos not sends
+⚪️ need to not let the server acces the rest of my computer only CEOs folder and within
+
 
 
 less significant:
 * what is async??? (read about it)
 * needs to be able to donwload files.
-
-✔️ add a refresh to the file tree
 ⚪️ fix resizing - so right panle will show all ways
 ⚪️ the icon is not loading
-✔️ replaces the nodifctions to the good ones (red and green)
 ⚪️ add viewer option
 ⚪️ logout!!!
 ⚪️ make a new folder for each user so there files will be stored there, use userID as the name of the folder.
 
 
 done:
+✔️ replaces the nodifctions to the good ones (red and green)
+✔️ add a refresh to the file tree
+✔️ when highlighting a content and pasting - one line highlight paste problam
+✔️ problam cmd/ctr z -  cmd/ctr z, after pasting highlighted (but only part of the end and first line ) - it showes only the part that was paste on (instead)
+✔️ when saving the next update deos not sends
+✔️ delete at the start of a line - does not work should be update and delete row below
+✔️ paste listener check if in mid of row if not sends addPaste if it does send the mid content and update the lines
+✔️ fix delete highlighted - deletes all the lines except the line one before the last one when delete row and a little bit.
+✔️ when highlighting a content and pasting (more them 1 row) the last row does not load properly
+✔️ fix in file - check the cmd/ctr z
 ✔️ allow the creater of the file to remove users to access file 
 ✔️ allow the creater of the file to allow users to access file
 ✔️add refresh button to the files 
