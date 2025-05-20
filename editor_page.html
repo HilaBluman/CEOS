@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Code Online Editor Sharing</title>
-    <!-- <link rel="icon" href="/imgs/icon.ico" type="image/icon">-->
-    <link rel="stylesheet" href="css/editor_page.css"> 
+    <link rel="icon" href="/imgs/icon.ico" type="image/icon">
+    <link rel="stylesheet" href="css/editor_page.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs/loader.min.js"></script>
 </head>
 
@@ -51,9 +51,8 @@
       <div class="right-panel-container">
         <div class="right-panel">
             <div class="toolbar">
-                <button onclick="newFile(event)">➕</button>
-                <button onclick="popFileInfo()">📄</button>
-                <button>👥</button>
+                <button onclick="newFile(event)">📄</button>
+                <button onclick="popFileInfo()">👥</button>
                 <button onclick="toggleOutput()">📟</button>
             </div>
     
@@ -107,25 +106,37 @@
   <input type="text" id="username-action" placeholder="Enter username">
   <button id="grant-user-btn">Grant Access</button>
   <button id="revoke-user-btn">Revoke Access</button>
+  <button id="delete-file-btn" onclick="confirmDelete()">Delete File</button>
   <button id="close-panel-btn">Close</button>
 </div>
 
+<!-- Delete Confirmation Popup -->
+<div id="delete-confirm-popup" class="popup">
+    <div class="popup-content">
+        <h2>Confirm Delete</h2>
+        <p>Are you sure you want to delete this file? This action cannot be undone.</p>
+        <div class="popup-buttons">
+            <button onclick="confirmDeleteAction(true)">Yes, Delete</button>
+            <button onclick="confirmDeleteAction(false)">No, Cancel</button>
+        </div>
+    </div>
+</div>
 
-  <div id="file-details" class="side-panel">
-    <h2 id="file-name">File Name: <span id="filename"></span></h2>
-    <h3>Users with Access:</h3>
-    <table id="detailsTable">
-        <thead>
-            <tr>
-                <th>Filename</th>
-                <th>Users</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Content will be populated here -->
-        </tbody>
-    </table>
-    <button id="close-panel-btn">Close</button>
+<div id="file-details" class="side-panel">
+  <h2 id="file-name">File Name: <span id="filename"></span></h2>
+  <h3>Users with Access:</h3>
+  <table id="detailsTable">
+      <thead>
+          <tr>
+              <th>Filename</th>
+              <th>Users</th>
+          </tr>
+      </thead>
+      <tbody>
+          <!-- Content will be populated here -->
+      </tbody>
+  </table>
+  <button id="close-panel-btn">Close</button>
 </div>
 
 

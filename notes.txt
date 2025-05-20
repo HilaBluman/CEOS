@@ -25,6 +25,10 @@ applyUpdate:
 bugs:
 
 important:
+✔️ delete file
+✔️ problam with new file dont know why(i think it is because of the acces)
+✔️ add a check in the server side if the client is the owner of teh file before revoking or allowing acces to file
+⚪️ add meaningful errors msg on the cilent side
 ⚪️ regular back ups 
 ⚪️ delete the last line - fix (when empty it is the real problam)
 ⚪️ when pasting "&lt;/&gt" because of & - fix

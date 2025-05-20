@@ -232,7 +232,7 @@ button:hover {
     background-color: var(--primary); /* Use the primary color for the background */
     border: 1px solid var(--accent); /* Use the accent color for the border */
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5); /* Darker shadow for depth */
-    border-radius: 8px;
+    border-radius: 10px;
 }
 
 .popup-content {
@@ -393,6 +393,21 @@ th {
     color: var(--text);
 }
 
+#file-details #delete-file-btn {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    margin: 20px 0;
+    padding: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+#file-details #delete-file-btn:hover {
+    background-color: #c82333;
+}
+
 /* Notification */
 .notification {
   position: fixed;
@@ -441,4 +456,39 @@ th {
 .refresh-btn:active {
     transform: rotate(180deg);
     transition: transform 0.3s ease;
+}
+
+.popup-buttons {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.popup-buttons button {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+}
+
+.popup-buttons button:first-child {
+    background-color: #dc3545;
+    color: white;
+}
+
+.popup-buttons button:first-child:hover {
+    background-color: #c82333;
+}
+
+.popup-buttons button:last-child {
+    background-color: #6c757d;
+    color: white;
+}
+
+.popup-buttons button:last-child:hover {
+    background-color: #5a6268;
 }

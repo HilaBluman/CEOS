@@ -219,6 +219,29 @@ class FileInfoDatabase:
             }
         return None
 
+    def delete_file(self, file_id):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # First get the filename to delete the actual file
+            cursor.execute('SELECT filename FROM fileInfo WHERE fileID = ?', (file_id,))
+            result = cursor.fetchone()
+            if not result:
+                return {'status': 404, 'message': 'File not found'}
+            
+            filename = result['filename']
+            
+            # Delete from fileInfo table
+            cursor.execute('DELETE FROM fileInfo WHERE fileID = ?', (file_id,))
+            conn.commit()
+            
+            return {'status': 200, 'message': 'File deleted successfully', 'filename': filename}
+        except Exception as e:
+            return {'status': 500, 'message': str(e)}
+        finally:
+            conn.close()
+
 class FilePermissionsDatabase:
     def __init__(self, db_path):
         self.db_path = db_path
@@ -233,6 +256,7 @@ class FilePermissionsDatabase:
             CREATE TABLE IF NOT EXISTS filePermissions (
                 fileID INTEGER,
                 userID INTEGER,
+                role TEXT,
                 PRIMARY KEY (fileID, userID),
                 FOREIGN KEY (fileID) REFERENCES fileInfo(fileID),
                 FOREIGN KEY (userID) REFERENCES users(userID)
@@ -247,15 +271,15 @@ class FilePermissionsDatabase:
         conn.row_factory = sqlite3.Row
         return conn
 
-    def grant_access(self, fileID, userID,role=None):
+    def grant_access(self, fileID, userID, role=None):
         conn = self.get_db_connection()
         cursor = conn.cursor()
-        if(role != None):
-            qerry = 'INSERT INTO filePermissions (fileID, userID, role) VALUES (?, ?)', (fileID, userID,role)
-        else:
-            qerry = 'INSERT INTO filePermissions (fileID, userID) VALUES (?, ?)', (fileID, userID)
+        
         try:
-            cursor.execute(qerry[0], qerry[1])
+            if role is not None:
+                cursor.execute('INSERT INTO filePermissions (fileID, userID, role) VALUES (?, ?, ?)', (fileID, userID, role))
+            else:
+                cursor.execute('INSERT INTO filePermissions (fileID, userID) VALUES (?, ?)', (fileID, userID))
             conn.commit()
             return {'status': 201, 'message': 'Access granted successfully.'}
         except sqlite3.IntegrityError:
@@ -268,8 +292,6 @@ class FilePermissionsDatabase:
     def revoke_access(self, fileID, userID):
         conn = self.get_db_connection()
         cursor = conn.cursor()
-        
-        # Check if user has access using the has_access method
         if not self.has_access(fileID, userID):
             conn.close()
             return {'status': 400, 'message': 'User does not have access to this file.'}
@@ -324,6 +346,19 @@ class FilePermissionsDatabase:
         conn.close()
         
         return [{'username': row[0], 'role': row[1] or 'user'} for row in results]
+
+    def delete_file_permissions(self, file_id):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('DELETE FROM filePermissions WHERE fileID = ?', (file_id,))
+            conn.commit()
+            return {'status': 200, 'message': 'File permissions deleted successfully'}
+        except Exception as e:
+            return {'status': 500, 'message': str(e)}
+        finally:
+            conn.close()
 
 class ChangeLogDatabase:
     def __init__(self, db_path):

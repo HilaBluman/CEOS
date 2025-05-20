@@ -123,7 +123,10 @@ def receive_headers(client_socket):
     if not action:
         #print("client disconnected")
         return f"client disconnected", ""
-    if action != "GET " and action != "POST":
+    if action == "DELE":
+        action =  action + client_socket.recv(2).decode()
+    if action != "GET " and action != "POST" and action != "DELETE" :
+
         #print(f"Not valid action: '{action}'")
         return f"Not valid action", ""
     try:
@@ -170,7 +173,9 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value = ""):
             print(f"File {filename} created in path.")
             # Get the file ID of the newly created file
             file_id = file_db.check_file_exists(user_id, filename)
-            file_permissions_db.grant_access(file_id, user_id,"owner")
+            print("fileID: " + str(file_id))
+            result = file_permissions_db.grant_access(file_id, user_id,"owner") # got 500 stutus every time
+            print("after grant_access to owner, result: " + str(result["status"]) + " " +result["message"] )
 
             data = json.dumps({
                 "success": "File created successfully",
@@ -291,7 +296,7 @@ def handle_client(client_socket, client_address, num_thread):
 
     try:
         try:
-            action, data = receive_headers(client_socket)
+            action, headers_data = receive_headers(client_socket)
             if action == "client disconnected":
                 print(action)
                 client_socket.close()
@@ -301,8 +306,6 @@ def handle_client(client_socket, client_address, num_thread):
                 print(action)
                 return  # Exit the function
 
-            
-            headers_data = data
 
             if not "/poll-updates" in headers_data:
                     print("_________________________")
@@ -567,6 +570,8 @@ def handle_client(client_socket, client_address, num_thread):
                         fileID = data.get('fileID')
                         username = data.get('username')
                         userID = user_db.get_user_id(username)
+                        if not file_db.is_owner(fileID, userID):
+                            client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
                         response = file_permissions_db.grant_access(fileID,userID)
                         client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
 
@@ -577,6 +582,8 @@ def handle_client(client_socket, client_address, num_thread):
                         fileID = data.get('fileID')
                         username = data.get('username')
                         userID = user_db.get_user_id(username)
+                        if not file_db.is_owner(fileID, userID):
+                            client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
                         response = file_permissions_db.revoke_access(fileID,userID)
                         client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
 
@@ -601,6 +608,46 @@ def handle_client(client_socket, client_address, num_thread):
                 except Exception as e:
                     print(f"Error processing POST request: {str(e)}")
                     handle_500(client_socket)
+
+            elif action == "DELETE":
+                if "/delete-file" in headers_data:
+                    try:
+                        print("in /delete-file")
+                        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
+                        user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
+                        
+                        if not file_id or not user_id:
+                            raise ValueError("File ID or User ID not provided")
+                        
+                        file_details = file_db.is_owner(file_id, user_id)
+
+                        file_result = file_db.delete_file(file_id)
+                        if file_result['status'] != 200:
+                            response = ready_to_send(str(file_result['status']), json.dumps({"error": file_result['message']}), "application/json")
+                            client_socket.send(response.encode())
+                            return
+
+                        permissions_result = file_permissions_db.delete_file_permissions(file_id)
+                        if permissions_result['status'] != 200:
+                            response = ready_to_send(str(permissions_result['status']), json.dumps({"error": permissions_result['message']}), "application/json")
+                            client_socket.send(response.encode())
+                            return
+
+                        # Delete file from the filesystem
+                        try:
+                            file_path = os.path.join(PATH_TO_FOLDER, "uploads", file_result['filename'])
+                            if os.path.exists(file_path):
+                                os.remove(file_path)
+                        except Exception as e:
+                            print(f"Error deleting file from filesystem: {str(e)}")
+
+                        response = ready_to_send("200 OK", json.dumps({"message": "File deleted successfully"}), "application/json")
+                        client_socket.send(response.encode())
+                    except Exception as e:
+                        print(f"Error in delete-file: {str(e)}")
+                        error_response = json.dumps({"error": str(e)})
+                        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+                        client_socket.send(response.encode())
 
             else:
                 print("received unknown action! action: " + action)

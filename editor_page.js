@@ -1,5 +1,5 @@
 let codeEditor;
-let isEditorReady = false; // Global flag to track editor readiness
+let isEditorReady = false; 
 const host = '192.168.68.54'
 const main_url = 'http://'+ host +':8000'
 
@@ -8,7 +8,7 @@ async function initializeEditor() {
     await new Promise((resolve) => {
         require(['vs/editor/editor.main'], async function () {
     
-        // ✅ JS compiler setup
+        // JS compiler setup
         monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
             target: monaco.languages.typescript.ScriptTarget.ES2020,
             allowNonTsExtensions: true,
@@ -17,7 +17,7 @@ async function initializeEditor() {
             strict: true
         });
 
-        // 🧠 Create editor 
+        // Create editor 
         codeEditor = monaco.editor.create(document.getElementById('editor-container'), {
             value: '// Start typing...\n',
             language: 'javascript',
@@ -30,7 +30,7 @@ async function initializeEditor() {
         monaco.languages.registerCompletionItemProvider('python', {
             provideCompletionItems: () => {
             const suggestions = [
-                        // Keywords & Core Syntax
+
                         { label: 'def', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'def ${1:function_name}(${2:params}):\n\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
                         { label: 'class', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'class ${1:ClassName}:\n\tdef __init__(self, $2):\n\t\t$0', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
                         { label: 'return', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'return $1', insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet },
@@ -165,7 +165,6 @@ function useCodeEditor(callback) {
     if (isEditorReady) {
         callback(codeEditor);
     } else {
-        // Wait for the editor to be ready
         window.addEventListener('editorReady', () => {
             callback(codeEditor);
         });
@@ -193,7 +192,6 @@ let userID = 0;
 let username = "";
 let lastModID = -1; 
 
-// Add these variables at the top of the file with other global variables
 let startWidth;
 let rightPanel;
 let mainSection;
@@ -290,7 +288,6 @@ useCodeEditor((editor) => {
        else if (isPaste){
             return;
         }
-        // Close file details
         else{
         document.getElementById('file-details').classList.remove('slide-in');
 
@@ -300,11 +297,9 @@ useCodeEditor((editor) => {
                 const changedText = change.text;                      // The new text that was inserted or replaced
                 const isDelete = changedText === '';                 // Check if the change is a delete operation
 
-                // Get the current content of the editor
                 const fullContent = editor.getValue();
                 let lines = fullContent.split('\n');
 
-                // Determine the action based on the type of change
                 let action  = "update";
 
                 if (undoTriggered){
@@ -329,8 +324,6 @@ useCodeEditor((editor) => {
                 }
 
                 else if (isDelete) {
-                        // delete in the same line 
-                        // Check if the delete is at the start of the row
                         action = 'delete same line';                 
                         lines = lines.map(line => line.replace(/\n$/, ''));
                         if (lines[lines.length - 1] === '') {
@@ -349,7 +342,6 @@ useCodeEditor((editor) => {
 });
 
 async function sendModifiction (content, row, action, linesLength) {
-    // First escape any special characters in the content
     const modification = JSON.stringify({
         content: content,
         row: row,
@@ -372,7 +364,6 @@ async function handlePaste(event) {
     linesArray[linesArray.length - 1] = lastLineContent;
     const contentPaste = linesArray.join("\n");
     await sendModifiction(contentPaste, firstLineNumber, "paste", 0);
-    //await sendModifiction(contentPaste, codeEditor.getSelection().startLineNumber, "update", 0);
     isPaste = false;
 };
 
@@ -430,7 +421,6 @@ async function onKeyZ(change, lines) {
     let changeLines = change["text"].split("\n");
     let startLine = change.range['startLineNumber'] - 1;
     let endLine = changeLines.length + startLine - 1;
-    // Handle custom behavior
     if (lines[startLine] !== ""){
         console.log(lines[startLine]);
         changeLines[0] = lines[startLine];
@@ -454,7 +444,6 @@ async function onDocumentKeySave(event) {
     }
 }
 
-// Core Functions
 async function saveAll() {
     const code = codeEditor.getValue();
     const modification = JSON.stringify({ content: code, row: 1, action: 'saveAll', linesLength: code.split("\n").length });
@@ -466,7 +455,6 @@ async function saveAll() {
 async function saveInput(modification) {
 
     try {
-        // First stringify the modification, then encode it
         const encodedModification = encodeURIComponent(modification);
         const url = "/save?modification=" + encodedModification;
         const response = await fetch(url, {
@@ -501,7 +489,6 @@ async function loadContent(fileId) {
         });
         const data = await response.json();
         if (data.fullContent) {
-            // Set the content in the Monaco editor
             Loadeing = true;
             lastModID = data.lastModID;
             console.log("lastModID: " + lastModID);
@@ -514,14 +501,13 @@ async function loadContent(fileId) {
 }
 
 function closeFilePopup() {
-    document.getElementById('file-popup').style.display = 'none'; // Hide the popup
+    document.getElementById('file-popup').style.display = 'none';
 }
 
 let selectedFileId = null;
 let selectedFileName = null;
 
 function selectFile(fileId, filename) {
-    //save file id 
     fileID = fileId;
     selectedFileId = fileId;
     selectedFileName = filename;
@@ -538,7 +524,6 @@ function selectFile(fileId, filename) {
 
 async function GetUserFiles(userId) {
     try {
-        //console.log('Fetching files for user ID:', userId); // Debugging line
         const response = await fetch('/get-user-files', {
             method: 'GET',
             headers: {
@@ -548,7 +533,7 @@ async function GetUserFiles(userId) {
         });
 
         if (!response.ok) {
-            const errorBody = await response.text(); // Log the response body for debugging
+            const errorBody = await response.text(); 
             throw new Error(`HTTP error! status: ${response.status}, body: ${errorBody}`);
         }
 
@@ -556,7 +541,7 @@ async function GetUserFiles(userId) {
         return {
             fileIds: data.filesId,
             filenames: data.filenames
-        }; // Return both fileIds and filenames
+        }; 
     } catch (error) {
         console.error('Error fetching user files:', error);
         return [];
@@ -564,66 +549,52 @@ async function GetUserFiles(userId) {
 }
 
 async function loadInitialFile() { 
-    username = await get_username(); // Ensure this is awaited if it's a promise
-    userID = await get_userID(); // Ensure this is awaited if it's a promise
+    username = await get_username(); 
+    userID = await get_userID(); 
 
-    const filesInfo = await GetUserFiles(userID); // Fetch user files
+    const filesInfo = await GetUserFiles(userID);
 
-    // Populate both the popup and sidebar file lists
     populateFileLists(filesInfo);
 
-    // Show the popup
     document.getElementById('file-popup').style.display = 'block';
 }
 
 function populateFileLists(filesInfo) {
     const fileList = document.getElementById('file-list');
     const fileTree = document.getElementById('file-tree');
-    
-    // Clear existing file lists
+
     fileList.innerHTML = '';
     fileTree.innerHTML = '';
     
-    // Check if fileIds and filenames are arrays before proceeding
     if (Array.isArray(filesInfo.fileIds) && Array.isArray(filesInfo.filenames)) {
-        // Populate both lists
         filesInfo.filenames.forEach((filename, index) => {
             const fileId = filesInfo.fileIds[index];
             
-            // Create list item for popup
             const popupListItem = document.createElement('li');
             popupListItem.textContent = filename;
             popupListItem.setAttribute('data-file-id', fileId);
             
-            // Create list item for sidebar
             const sidebarListItem = document.createElement('li');
             sidebarListItem.innerHTML = `📄 ${filename}`;
             sidebarListItem.setAttribute('data-file-id', fileId);
             
-            // Add click events
             const handleFileClick = async () => {
-                // Remove 'selected' class from all items in both lists
                 document.querySelectorAll('#file-list li, #file-tree li').forEach(item => 
                     item.classList.remove('selected')
                 );
-                // Add 'selected' class to clicked items
+
                 popupListItem.classList.add('selected');
                 sidebarListItem.classList.add('selected');
-                // Call the selectFile function
                 selectFile(fileId, filename);
                 
-                // Load the file content
                 await loadContent(fileId);
-                // Close the popup if it's open
                 closeFilePopup();
-                // Close file detail if open
                 document.getElementById('file-details').classList.remove('slide-in');
             };
             
             popupListItem.onclick = handleFileClick;
             sidebarListItem.onclick = handleFileClick;
             
-            // Append items to their respective lists
             fileList.appendChild(popupListItem);
             fileTree.appendChild(sidebarListItem);
         });
@@ -636,7 +607,7 @@ function populateFileLists(filesInfo) {
 async function createNewFile(filename) {
     if (!hasValidExtension(filename)) {
             filename = filename.replace(/\..*$/, '.txt');
-    }  //fix extenstion ending
+    } 
         try {
             const response = await fetch('/new-file', {
                 method: 'GET',
@@ -650,7 +621,6 @@ async function createNewFile(filename) {
             const data = await response.json();
 
             if (response.status === 409) {
-                // File already exists
                 showNotification('A file with this name already exists. Please choose a different name.', 'error');
                 return;
             }
@@ -659,30 +629,24 @@ async function createNewFile(filename) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            // Set the current file ID
             if (data.fileId !== 0) {
                 fileID = data.fileId;
             }
 
-            // Update the file tree
             const fileTree = document.querySelector('.file-tree');
             const newFileItem = document.createElement('li');
             newFileItem.innerHTML = `📄 ${filename}`;
             newFileItem.setAttribute('data-file-id', data.fileId);
             fileTree.appendChild(newFileItem);
 
-            // Update the editor
             codeEditor.setValue('// New file');
             
-            // Update the current file tab
             const currentFileTab = document.getElementById('current-file-tab');
             currentFileTab.textContent = filename;
             currentFileTab.classList.add('active-tab');
 
-            // Close the file popup if it's open
             closeFilePopup();
 
-            // Load the new file content
             await loadContent(data.fileId);
 
         } catch (error) {
@@ -755,13 +719,11 @@ async function applyUpdate(update) {
 
         let { range, content, decorations} = getRangeAndContent(update);
 
-        // Apply the update using the editor's executeEdits method
         codeEditor.executeEdits('', [{
             range: range,
             text: content
         }]);
         
-        // Apply decorations and remove them after a short delay
         const decorationIds = codeEditor.deltaDecorations([], decorations);
         setTimeout(() => {
             codeEditor.deltaDecorations(decorationIds, []);
@@ -771,7 +733,7 @@ async function applyUpdate(update) {
         console.error('Error applying partial update:', error);
     }
     finally {
-        isApplyingUpdates = false; // Reset the flag after applying updates
+        isApplyingUpdates = false; 
     }
 }
 
@@ -783,82 +745,68 @@ function getRangeAndContent(update) {
     const model = codeEditor.getModel();
     let range;
 
-    //checking if a empty line has been deleted
-    /*if(action == "delete row below"){
-       action = "delete";
-        row  = row + 1;
-    }*/
    const linesCount = model.getLineCount();
 
-    if (action === "delete highlighted") { // must first if
-        // For delete highlighted action, we need to create a range that represents the highlighted lines
-        // The start is the row, and the end is the last line of the content.
+    if (action === "delete highlighted") { 
         range = new monaco.Range(
             row,            // Convert 0-based to 1-based
             1,              // Start at beginning of line
             content + 1,         // the end of the delete is in content 
             1               // End at beginning of the last line
         );
-        content = "";       // Empty content to remove the lines
+        content = "";       
     } else if (content.startsWith("\n") && action === "update" && row === model.getLineCount()){
-        // Handle new line at the end of file
         range = new monaco.Range(
-            update.row + 1,  // Next line
-            1,              // Start at beginning of line
-            update.row + 1, // Same line
-            1               // End at beginning of line
+            update.row + 1,  
+            1,              
+            update.row + 1, 
+            1               
         );
-        content = ""; // Empty content for new line
+        content = "";
     } else if (action === "insert" || action === "paste") {
-        // For insert action, we need to create a range that represents a new line
-        // make sure it has a a "\n" at the end.
             if (! content.endsWith("\n")){
                 content = content + "\n";
             }
 
         range = new monaco.Range(
-            row,  // Convert 0-based to 1-based
-            1,              // Start at beginning of line
-            row,            // Same line
-            1               // End at beginning of line (empty line)
+            row,  
+            1,             
+            row,            
+            1               
         );
     } else if (action == "delete"){
-        // For delete action when the whole line is being deleted
         range = new monaco.Range(
-            row,  // Convert 0-based to 1-based
-            1,              // Start at beginning of line
-            row + 1,        // Next line
-            1               // Start of next line
+            row,  
+            1,              
+            row + 1,        
+            1               
         );
-        content = "";       // Empty content to remove the line
+        content = "";       
     } else if (action === "update") {
-        // For update action (including deletions within the same row)
         range = new monaco.Range(
-            row,  // Convert 0-based to 1-based
-            1,              // Start at beginning of line
-            row,            // Same line
-            model.getLineContent(row).length + 1  // End at end of current line
+            row,  
+            1,              
+            row,            
+            model.getLineContent(row).length + 1  
         );
     }else if(action === "saveAll"){
         range = new monaco.Range(
-            1,  // Convert 0-based to 1-based
-            1,              // Start at beginning of line
-            model.getLineCount(),            // Last line
-            model.getLineContent(row).length + 1  // End at end of current line
+            1,  
+            1,              
+            model.getLineCount(),            
+            model.getLineContent(row).length + 1  
         );
     } else if (action === "update and delete row below") {
-        // Adjust the range to include the next line for deletion
         range = new monaco.Range(
-            row,            // Convert 0-based to 1-based
-            1,              // Start at beginning of line
-            row + 1,        // Next line after the one to be deleted
-            1               // Start of the line after the one to be deleted
+            row,            
+            1,              
+            row + 1,        
+            1               
         );
-    }else { //change becuse the action is not the right one
+    }else { 
         console.log("action not acceptable.")
     }
 
-    // Add cursor line decoration only for update action
     decorations = [{
         range: new monaco.Range(row, content.length + 1, row, content.length + 1),
         options: {
@@ -898,7 +846,6 @@ async function pollForUpdates() {
         }
         else if (Array.isArray(data) && data.length > 0) {
             console.log('Received updates:', data);
-            // Process all updates in order
             for (const update of data) {
                 if(update.ModID > lastModID)
                 {
@@ -918,7 +865,6 @@ async function pollForUpdates() {
             console.error('Error polling for updates:', error);
         }
     } finally {
-        // Schedule next poll only after current one completes
         if (pollingInterval) {
             setTimeout(pollForUpdates, 200);
         }
@@ -926,7 +872,6 @@ async function pollForUpdates() {
 }
 
 function startPolling() {
-    // Start the first poll immediately
     pollingInterval = true;
     pollForUpdates();
 }
@@ -982,7 +927,6 @@ function promptUploadFile() {
             console.error('Error during file upload:', error);
             showNotification(error.message, 'error');
         } finally {
-            // Clean up the file input
             document.body.removeChild(fileInput);
         }
     };
@@ -1015,20 +959,66 @@ function popFileInfo() {
         return;
     }
 
-    // Open the side panel
     const sidePanel = document.getElementById('file-details');
     sidePanel.classList.add('open');
 
-    // Set the filename
     document.getElementById('filename').textContent = selectedFileName;
 
-    // Load file details
     loadFileDetails();
+}
+
+function confirmDelete() {
+    const popup = document.getElementById('delete-confirm-popup');
+    popup.style.display = 'flex';
+}
+
+function confirmDeleteAction(confirmed) {
+    const popup = document.getElementById('delete-confirm-popup');
+    popup.style.display = 'none';
+    
+    if (confirmed) {
+        deleteFile();
+    }
+}
+
+async function deleteFile(){
+    try {
+        const response = await fetch('/delete-file', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'fileID': fileID,
+                'userID': userID
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        document.getElementById('file-details').classList.remove('slide-in');
+        codeEditor.setValue('');
+    
+        const currentFileTab = document.getElementById('current-file-tab');
+        currentFileTab.textContent = '';
+        currentFileTab.classList.remove('active-tab');
+        
+        fileID = 0;
+        stopPolling();
+
+        refreshFiles();
+        const filePopup = document.getElementById('file-popup');
+        filePopup.style.display = 'block';
+
+        showNotification('File deleted successfully', 'success');
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        showNotification('Failed to delete file. Please try again.', 'error');
+    }
 }
 
 async function loadFileDetails() {
     try {
-        // Fetch file details from server
         const response = await fetch('/get-file-details', {
             method: 'GET',
             headers: {
@@ -1043,56 +1033,42 @@ async function loadFileDetails() {
 
         const data = await response.json();
         console.log("Details data :", JSON.stringify(data));
-
-        // Update the filename
         document.getElementById('filename').textContent = data.filename;
-
-        // Check if current user is the owner
         const isOwner = data.owner_id === parseInt(userID);
         
         // Show/hide user management controls based on ownership
-        const userManagementControls = document.querySelectorAll('#username-action, #grant-user-btn, #revoke-user-btn');
+        const userManagementControls = document.querySelectorAll('#username-action, #grant-user-btn, #revoke-user-btn, #delete-file-btn');
         userManagementControls.forEach(control => {
             control.style.display = isOwner ? 'block' : 'none';
         });
 
         if (Array.isArray(data.users)) {
-            // Clear existing table content
             const userList = document.getElementById('user-list');
             userList.innerHTML = '';
             
-            // Populate the table
             data.users.forEach((user) => {             
-                // Create table row
                 const row = document.createElement('tr');
                 
-                // Create username cell
                 const usernameCell = document.createElement('td');
                 usernameCell.textContent = user.username;
                 
-                // Create role cell
                 const roleCell = document.createElement('td');
-                roleCell.textContent = user.role || 'user'; // Default to 'user' if role is not specified
+                roleCell.textContent = user.role || 'user';
                 
-                // Append cells to row
                 row.appendChild(usernameCell);
                 row.appendChild(roleCell);
-                
-                // Append row to table
                 userList.appendChild(row);
             });
         }
-        // Slide in the details window
         document.getElementById('file-details').classList.add('slide-in');
 
-        // Add event listener for closing the panel
         document.getElementById('close-panel-btn').onclick = () => {
             document.getElementById('file-details').classList.remove('slide-in');
         };
 
     } catch (error) {
         console.error('Error loading file details:', error);
-        showNotification(error.message, 'error');
+        showNotification('Error loading file details', 'error');
     }
 }
 
@@ -1122,7 +1098,6 @@ async function accessUser(usernameInput,request) {
     }
 
     try {
-        // Add user to file
         const response = await fetch(prompt, {
             method: 'POST',
             headers: {
@@ -1135,8 +1110,8 @@ async function accessUser(usernameInput,request) {
 
         if (response.ok) {
             showNotification('Access ' + request + ' successfuly! the user needs to refresh the files!', 'success');
-            usernameInput.value = ''; // Clear the input
-            loadFileDetails(); // Refresh the user list
+            usernameInput.value = ''; 
+            loadFileDetails(); 
         } else {
             showNotification(data.message, 'error');
         }
@@ -1183,43 +1158,35 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-// Add event listener for the refresh button
+async function refreshFiles(){
+    const filesInfo = await GetUserFiles(userID);
+    populateFileLists(filesInfo);
+    
+    if (fileID) {
+        const currentFileExists = filesInfo.fileIds.includes(parseInt(fileID));
+        if (!currentFileExists) {
+            showNotification('You no longer have access to this file', 'error');
+            codeEditor.setValue('');
+            const currentFileTab = document.getElementById('current-file-tab');
+            currentFileTab.textContent = '';
+            currentFileTab.classList.remove('active-tab');
+            fileID = 0;
+            stopPolling();
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const refreshBtn = document.getElementById('refresh-files');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', async () => {
-            // Add rotation animation
             refreshBtn.style.transform = 'rotate(360deg)';
             refreshBtn.style.transition = 'transform 0.5s ease';
-            
-            // Refresh the files list
-            const filesInfo = await GetUserFiles(userID);
-            populateFileLists(filesInfo);
-            
-            // Check if current file is still accessible
-            if (fileID) {
-                const currentFileExists = filesInfo.fileIds.includes(parseInt(fileID));
-                if (!currentFileExists) {
-                    // User no longer has access to the current file
-                    showNotification('You no longer have access to this file', 'error');
-                    // Clear the editor
-                    codeEditor.setValue('');
-                    // Clear the current file tab
-                    const currentFileTab = document.getElementById('current-file-tab');
-                    currentFileTab.textContent = '';
-                    currentFileTab.classList.remove('active-tab');
-                    // Reset fileID
-                    fileID = 0;
-                    // Stop polling for updates
-                    stopPolling();
-                }
-            }
-            
-            // Reset rotation after animation
-            setTimeout(() => {
-                refreshBtn.style.transform = '';
-            }, 500);
-        });
+            refreshFiles();
+        setTimeout(() => {
+            refreshBtn.style.transform = '';
+        }, 500);
+    });
     }
-});
+});  
 
