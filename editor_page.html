@@ -52,27 +52,14 @@
         <div class="right-panel">
             <div class="toolbar">
                 <button onclick="newFile(event)">📄</button>
-                <button onclick="popFileInfo()">👥</button>
-                <button onclick="toggleOutput()">📟</button>
+                <button onclick="popFileInfo('D')">👥</button>
+                <button onclick="popFileInfo('V')"> 𝐕 </button>
             </div>
-    
-            <div class="output-section">
-                <div class="output">
-                    <div class="output-title">Output Console</div>
-                    // Secondary output console...
-                </div>
-            </div>
+
         </div>
         <div class="resizer"></div>
     </div>
-      
-        <div class="output-section">
-          <div class="output">
-            <div class="output-title">Output Console</div>
-            // Secondary output console...
-          </div>
-        </div>
-      </div>
+</div>
 
  <!-- Choosing A File Popup -->     
 <div id="file-popup" class="popup" style="display: flex;">
@@ -83,12 +70,13 @@
     </div>
 </div>
 
-<!-- Mini File Options Popup -->
+<!-- New file options popup -->
 <div id="mini-popup" class="mini-popup">
   <div class="mini-option" onclick="promptNewFile()">➕ Create File</div>
   <div class="mini-option" onclick="promptUploadFile()">📤 Upload File</div>
 </div>
 
+<!-- File details popup -->
 <div id="file-details" class="side-panel">
   <h2 id="file-name">File Name: <span id="filename"></span></h2>
   <h3>Users with Access:</h3>
@@ -106,15 +94,16 @@
   <input type="text" id="username-action" placeholder="Enter username">
   <button id="grant-user-btn">Grant Access</button>
   <button id="revoke-user-btn">Revoke Access</button>
-  <button id="delete-file-btn" onclick="confirmDelete()">Delete File</button>
-  <button id="close-panel-btn">Close</button>
+  <button id="delete-file-btn" onclick="confirmDelete('file')">Delete File</button>
+  <button id="close-panel-D-btn">Close</button>
 </div>
 
 <!-- Delete Confirmation Popup -->
 <div id="delete-confirm-popup" class="popup">
     <div class="popup-content">
         <h2>Confirm Delete</h2>
-        <p>Are you sure you want to delete this file? This action cannot be undone.</p>
+        <p>Are you sure you want to delete this? This action cannot be undone.</p>
+        <input type="hidden" id="delete-type" value="">
         <div class="popup-buttons">
             <button onclick="confirmDeleteAction(true)">Yes, Delete</button>
             <button onclick="confirmDeleteAction(false)">No, Cancel</button>
@@ -122,23 +111,27 @@
     </div>
 </div>
 
-<div id="file-details" class="side-panel">
+<!-- versions details popup -->
+<div id="versions-details" class="side-panel">
   <h2 id="file-name">File Name: <span id="filename"></span></h2>
-  <h3>Users with Access:</h3>
-  <table id="detailsTable">
+  <h3>Versions:</h3>
+  <table id="version-table">
       <thead>
           <tr>
-              <th>Filename</th>
-              <th>Users</th>
+              <th>Version</th>
+              <th>Date</th>
+              <th>Time</th>
           </tr>
       </thead>
-      <tbody>
-          <!-- Content will be populated here -->
+      <tbody id="versions-list">
+          <!-- versions list will be added here -->
       </tbody>
   </table>
-  <button id="close-panel-btn">Close</button>
+  <input type="text" id="delete-version-action" placeholder="Version to delete">
+  <button id="save-version-btn" onclick="saveNewVersion('version')">Save New Version</button>
+  <button id="delete-version-btn" onclick="confirmDelete('version')">Delete Version</button>
+  <button id="close-panel-V-btn">Close</button>
 </div>
-
 
   <script type="text/javascript" src="js/editor_page.js"></script>
 </body>

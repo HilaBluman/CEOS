@@ -6,7 +6,7 @@ import threading
 import urllib.parse
 import fcntl
 from difflib import SequenceMatcher
-from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase
+from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase
 import html
 # Create an instance at the start of your server
 DB_PATH = "/Users/hila/CEOs/users.db"
@@ -14,6 +14,7 @@ user_db = UserDatabase(DB_PATH)
 file_permissions_db = FilePermissionsDatabase(DB_PATH)
 file_db = FileInfoDatabase(DB_PATH)
 change_log_db = ChangeLogDatabase(DB_PATH)
+version_log_db = VersionDatabase(DB_PATH)
 
 def file_exist(file_path):
     if not os.path.exists(file_path):
@@ -426,20 +427,12 @@ def handle_client(client_socket, client_address, num_thread):
                     try:
                         print("Getting user files")
                         user_id = get_header(client_socket, headers_data, r'userId:\s*(\d+)')
-                        
                         if user_id is None:
-                            return  # Handle the case where user_id is not found
-
-                        user_id = int(user_id)  # Convert user_id to integer if necessary
-
-                        # Get list of files that user has access to
+                            return
+                        user_id = int(user_id) 
                         user_files = file_permissions_db.get_user_access_files(user_id)
-                        
-                        # Separate file IDs and filenames into two lists
                         file_ids = [file['fileID'] for file in user_files]
                         file_names = [file['filename'] for file in user_files]
-
-                        # Prepare the response data with separate arrays
                         response_data = json.dumps({
                             'filesId': file_ids,
                             'filenames': file_names
@@ -452,6 +445,24 @@ def handle_client(client_socket, client_address, num_thread):
                         error_response = json.dumps({'error': str(e)})
                         response = ready_to_send("500 Internal Server Error", error_response, "application/json")
                         client_socket.send(response.encode())
+                
+                elif "/get-version-details" in headers_data:
+                    try:
+                        print("in /get-version-details")
+                        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
+                        if not file_id:
+                            raise ValueError("File ID not provided")
+                        versions = version_log_db.get_versions_by_fileID(file_id)
+                        response_data = json.dumps({
+                            'versions': versions,
+                            'owner_id': file_db.get_owner_id(file_id)
+                        })
+                        response = ready_to_send("200 OK", response_data, "application/json")
+                        client_socket.send(response.encode())
+                    except Exception as e:
+                        print(f"Error in get-version-details: {str(e)}")
+                        error_response = json.dumps({"error": str(e)})
+                        client_socket.send(ready_to_send("500 Internal Server Error", error_response, "application/json").encode())
                 
                 elif "/new-file" in headers_data:
                     print("New file")
@@ -576,7 +587,6 @@ def handle_client(client_socket, client_address, num_thread):
                         client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
 
                     elif "/revoke-user-to-file" in headers_data:
-                        #print("headers_data: " + headers_data)
                         body = client_socket.recv(content_length).decode()
                         data = json.loads(body)
                         fileID = data.get('fileID')
@@ -586,6 +596,18 @@ def handle_client(client_socket, client_address, num_thread):
                             client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
                         response = file_permissions_db.revoke_access(fileID,userID)
                         client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+                    
+                    elif "/save-new-version" in headers_data:
+                        print("in save-new-version")
+                        print("headers_data: " + headers_data)
+                        body = client_socket.recv(content_length).decode()
+                        data = json.loads(body)
+                        fileID = data.get('fileID')
+                        userID = data.get('userID')
+                        content = data.get('content')
+                        response = version_log_db.add_version(int(fileID),content)
+                        client_socket.send(ready_to_send(response['status'], json.dumps(response['message']), "application/json").encode())
+                    
 
 
                     elif "/disconnection" in headers_data:
@@ -610,18 +632,31 @@ def handle_client(client_socket, client_address, num_thread):
                     handle_500(client_socket)
 
             elif action == "DELETE":
-                if "/delete-file" in headers_data:
+                if "/delete-version" in headers_data:
+                    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
+                    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
+                    version = get_header(client_socket, headers_data, r'version:\s*(\d+)')
+
+                    if not file_id or not user_id or not version:
+                            raise ValueError("File ID, User ID or Version not provided")
+                    if not file_db.is_owner(int(file_id), int(user_id)):
+                        client_socket.send(ready_to_send("500 Internal Server Error", "Not owner!!", "text/plain").encode())
+                    else:
+                        result = version_log_db.delete_version(version,file_id)
+                        client_socket.send(ready_to_send(result['status'], result["message"], "text/plain").encode())
+
+                elif "/delete-file" in headers_data:
                     try:
-                        print("in /delete-file")
+                        
                         file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
                         user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
                         
                         if not file_id or not user_id:
                             raise ValueError("File ID or User ID not provided")
-                        
-                        file_details = file_db.is_owner(file_id, user_id)
-
+                        if not file_db.is_owner(int(file_id), int(user_id)):
+                            client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
                         file_result = file_db.delete_file(file_id)
+
                         if file_result['status'] != 200:
                             response = ready_to_send(str(file_result['status']), json.dumps({"error": file_result['message']}), "application/json")
                             client_socket.send(response.encode())

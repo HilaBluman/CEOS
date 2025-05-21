@@ -290,6 +290,7 @@ useCodeEditor((editor) => {
         }
         else{
         document.getElementById('file-details').classList.remove('slide-in');
+        document.getElementById('versions-details').classList.remove('slide-in');
 
             for (const change of event.changes) {
                 const startLineNumber = change.range.startLineNumber; // Starting line number of the change
@@ -500,9 +501,6 @@ async function loadContent(fileId) {
     }
 }
 
-function closeFilePopup() {
-    document.getElementById('file-popup').style.display = 'none';
-}
 
 let selectedFileId = null;
 let selectedFileName = null;
@@ -588,8 +586,9 @@ function populateFileLists(filesInfo) {
                 selectFile(fileId, filename);
                 
                 await loadContent(fileId);
-                closeFilePopup();
+                document.getElementById('file-popup').style.display = 'none';
                 document.getElementById('file-details').classList.remove('slide-in');
+                document.getElementById('versions-details').classList.remove('slide-in');
             };
             
             popupListItem.onclick = handleFileClick;
@@ -645,7 +644,7 @@ async function createNewFile(filename) {
             currentFileTab.textContent = filename;
             currentFileTab.classList.add('active-tab');
 
-            closeFilePopup();
+            document.getElementById('file-popup').style.display = 'none';
 
             await loadContent(data.fileId);
 
@@ -896,7 +895,7 @@ function newFile(event) {
 function promptNewFile() {
     const filename = prompt("Enter new file name:");
     if (filename) createNewFile(filename);
-    closeMiniPopup();
+    document.getElementById('mini-popup').style.display = 'none';
 }
 
 function promptUploadFile() {
@@ -933,12 +932,10 @@ function promptUploadFile() {
 
     document.body.appendChild(fileInput);
     fileInput.click();
-    closeMiniPopup();
-}
-
-function closeMiniPopup() {
     document.getElementById('mini-popup').style.display = 'none';
 }
+
+
 
 document.addEventListener('click', (e) => {
     const popup = document.getElementById('mini-popup');
@@ -953,31 +950,122 @@ document.addEventListener('click', (e) => {
 });
 
 
-function popFileInfo() {
+function popFileInfo(popupVariation) {
     if (!fileID || !selectedFileName) {
         showNotification('Please select a file first', 'error');
         return;
     }
-
-    const sidePanel = document.getElementById('file-details');
-    sidePanel.classList.add('open');
-
+    
+    let sidePanel = '';
+    
+    if (popupVariation === "D") {
+        sidePanel = document.getElementById('file-details');
+        sidePanel.classList.add('open');
+        loadFileDetails();
+    } else if (popupVariation === "V") {
+        sidePanel = document.getElementById('versions-details');
+        sidePanel.classList.add('open');
+        loadVersionDetails(); 
+    } else {
+        console.log("The popup variation does not exist!");
+    }
     document.getElementById('filename').textContent = selectedFileName;
-
-    loadFileDetails();
 }
 
-function confirmDelete() {
+async function loadVersionDetails() {
+    try {
+        const response = await fetch('/get-version-details', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'fileID': fileID
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        const isOwner = data.owner_id === parseInt(userID);
+
+        const userManagementControls = document.querySelectorAll('#delete-version-btn');
+        userManagementControls.forEach(control => {
+            control.style.display = isOwner ? 'block' : 'none';
+        });
+        const versionsList = document.getElementById('versions-list');
+        versionsList.innerHTML = ''; 
+
+        data.versions.forEach(version => {
+            const row = document.createElement('tr');
+            const versionCell = document.createElement('td');
+            versionCell.textContent = version[0];
+            const dateCell = document.createElement('td');
+            dateCell.textContent = version[1];
+            const timeCell = document.createElement('td');
+            timeCell.textContent = version[2];
+
+            row.appendChild(versionCell);
+            row.appendChild(dateCell);
+            row.appendChild(timeCell);
+            versionsList.appendChild(row);
+        });
+
+        document.getElementById('versions-details').classList.add('slide-in'); 
+
+        document.getElementById('close-panel-V-btn').onclick = () => {
+            document.getElementById('versions-details').classList.remove('slide-in');}
+
+    } catch (error) {
+        console.error('Error loading version details:', error);
+        showNotification('Error loading version details', 'error');
+    }
+}
+
+function confirmDelete(type) {
     const popup = document.getElementById('delete-confirm-popup');
+    document.getElementById('delete-type').value = type;
     popup.style.display = 'flex';
 }
 
 function confirmDeleteAction(confirmed) {
     const popup = document.getElementById('delete-confirm-popup');
+    const deleteType = document.getElementById('delete-type').value;
     popup.style.display = 'none';
     
     if (confirmed) {
-        deleteFile();
+        if (deleteType === 'file') {
+            deleteFile();
+        } else if (deleteType === 'version') {
+            deleteVersion();
+        }
+    }
+}
+
+async function deleteVersion() {
+    const version = document.getElementById('delete-version-action').value.trim();
+    try {
+        const response = await fetch('/delete-version', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'fileID': fileID,
+                'userID': userID,
+                'version': version
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        document.getElementById('versions-details').classList.remove('slide-in');
+        showNotification('Version deleted successfully', 'success');
+        loadVersionDetails(); // Refresh the versions list
+    } catch (error) {
+        console.error('Error deleting version:', error);
+        showNotification('Failed to delete version. Please try again.', 'error');
     }
 }
 
@@ -1061,8 +1149,8 @@ async function loadFileDetails() {
             });
         }
         document.getElementById('file-details').classList.add('slide-in');
-
-        document.getElementById('close-panel-btn').onclick = () => {
+        document.getElementById('file-details').classList.add('slide-in');
+        document.getElementById('close-panel-D-btn').onclick = () => {
             document.getElementById('file-details').classList.remove('slide-in');
         };
 
@@ -1157,6 +1245,36 @@ function showNotification(message, type = 'info') {
         }, 500);
     }, 3000);
 }
+
+async function saveNewVersion() {
+    try {
+        const response = await fetch('/save-new-version', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({fileID,userID, content: codeEditor.getValue() })
+        });
+
+        if (!response.ok) {
+            console.log("error: " + response.json().stringify());
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+            
+        showNotification(data, 'success');
+        loadVersionDetails();
+
+    } catch (error) {
+        console.error('Error saving new version:', error);
+        showNotification('Error saving new version', 'error');
+    }
+}
+
+
+
+
 
 async function refreshFiles(){
     const filesInfo = await GetUserFiles(userID);

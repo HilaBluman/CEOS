@@ -2,7 +2,7 @@ create:
 * deleting files
 * add the user name next to the curser of the person that is editing the file (maybe use different colors foe each person) - see whatsupp
 * add an option to see the changes that happend from the a spacific time and date (using the changes to go back? than use LSC to show the changes) - see whatsupp
-* maybe add verstions - see whatsupp (save every 20 modiftions or 1 day if less modiftions) (if no modftions for a long time it wont save an till there i modiftion)
+* maybe add versions - see whatsupp (save every 20 modiftions or 1 day if less modiftions) (if no modftions for a long time it wont save an till there i modiftion)
 
 
 applyUpdate:
@@ -22,19 +22,18 @@ applyUpdate:
 ✔️ handle writing in the last row
 ✔️ fix ( does not do down a line at the 2 line ) - in paste, new row in a mid of chacters.
 
-bugs:
 
 important:
+⚪️ problam with nodifctions for grent and revoke (but is works)
+⚪️ fix time stamp in version
 ✔️ delete file
 ✔️ problam with new file dont know why(i think it is because of the acces)
 ✔️ add a check in the server side if the client is the owner of teh file before revoking or allowing acces to file
 ⚪️ add meaningful errors msg on the cilent side
-⚪️ regular back ups 
+⚪️ regular back ups - owner can save versions (one file can only have 5 versions, when new version but 5 delete the first one )
 ⚪️ delete the last line - fix (when empty it is the real problam)
 ⚪️ when pasting "&lt;/&gt" because of & - fix
 ⚪️ check the cmd/ctr z end cases
-⚪️ need to not let the server acces the rest of my computer only CEOs folder and within
-
 
 
 less significant:
@@ -45,6 +44,8 @@ less significant:
 ⚪️ add viewer option
 ⚪️ logout!!!
 ⚪️ make a new folder for each user so there files will be stored there, use userID as the name of the folder.
+⚪️ need to not let the server acces the rest of my computer only CEOs folder and within
+
 
 
 done:

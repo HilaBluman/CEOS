@@ -333,12 +333,12 @@ button:hover {
 }
 
 
-#file-details {
+#file-details, #versions-details {
   position: fixed;
   display: show;
-  right: -400px; /* Hidden off-screen */
+  right: -500px; 
   top: 0;
-  width: 300px;
+  width: 350px;
   height: 100%;
   background-color: var(--secondary);
   box-shadow: -2px 0 5px rgba(0, 0, 0, 0.5);
@@ -347,65 +347,74 @@ button:hover {
   z-index: 1000;
 }
 
-#file-details.slide-in {
+#file-details.slide-in, #versions-details.slide-in {
   right: 0; /* Slide in */
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
+#file-details h2, #versions-details h2 {
+  color: var(--accent);
+  margin-bottom: 20px;
 }
 
-th, td {
+#file-details h3, #versions-details h3 {
+  color: var(--text);
+  margin-bottom: 15px;
+}
+
+#file-details table, #versions-details table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 30px;
+}
+
+#file-details th, #versions-details th,
+#file-details td, #versions-details td {
   border: 1px solid var(--accent);
   padding: 8px;
   text-align: left;
 }
 
-th {
+#file-details th, #versions-details th {
   background-color: rgb(122, 7, 164);
+  color: var(--text);
 }
 
-#file-details button {
-    margin: 10px 0;
-    width: 100%;
+#file-details button, #versions-details button {
+  margin: 10px 0;
+  width: 100%;
 }
 
-#file-details #add-user-btn {
-    margin-bottom: 20px;
+#file-details #add-user-btn, #versions-details #add-user-btn {
+  margin-bottom: 20px;
 }
 
-#file-details #close-panel-btn {
-    margin-top: 20px;
+#file-details #close-panel-btn, #versions-details #close-panel-btn {
+  margin-top: 20px;
 }
 
-#file-details table {
-    margin-bottom: 30px;
+#file-details input[type="text"], #versions-details input[type="text"] {
+  margin-bottom: 15px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background-color: var(--primary);
+  color: var(--text);
 }
 
-#file-details input[type="text"] {
-    margin-bottom: 15px;
-    width: 100%;
-    padding: 8px;
-    border: 1px solid var(--accent);
-    border-radius: 4px;
-    background-color: var(--primary);
-    color: var(--text);
+#file-details #delete-file-btn, #versions-details #delete-version-btn {
+  background-color: #ff4356;
+  color: white;
+  border: none;
+  margin: 20px 0;
+  padding: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 
-#file-details #delete-file-btn {
-    background-color: #dc3545;
-    color: white;
-    border: none;
-    margin: 20px 0;
-    padding: 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-}
-
-#file-details #delete-file-btn:hover {
-    background-color: #c82333;
+#file-details #delete-file-btn:hover, #versions-details #delete-version-btn:hover {
+  background-color: #e61328;
 }
 
 /* Notification */

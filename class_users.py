@@ -109,6 +109,20 @@ class FileInfoDatabase:
         
         conn.commit()
         conn.close()
+
+    def get_owner_id(self, file_id):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT ownerID FROM fileInfo WHERE fileID = ?', (file_id,))
+            result = cursor.fetchone()
+            return result['ownerID'] if result else None
+        except Exception as e:
+            print(f"Error getting owner ID: {str(e)}")
+            return None
+        finally:
+            conn.close()
+
     def is_owner(self, fileID, userID):
         conn = self.get_db_connection()
         cursor = conn.cursor()
@@ -116,7 +130,6 @@ class FileInfoDatabase:
         cursor.execute('SELECT ownerID FROM fileInfo WHERE fileID = ?', (fileID,))
         owner = cursor.fetchone()
         conn.close()
-        
         if owner and owner['ownerID'] == userID:
             return True  # The user is the owner of the file
         else:
@@ -460,11 +473,116 @@ class ChangeLogDatabase:
         change_dict['modification'] = json.loads(change_dict['modification'])  # Deserialize JSON
         return change_dict
     
+class VersionDatabase:
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self.lock = threading.Lock()
+
+    def create_version_table(self):
+        with self.lock:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS versionsLog (
+                    version INTEGER,
+                    fileID INTEGER,
+                    timeStamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    content TEXT,
+                    PRIMARY KEY (version, fileID),
+                    FOREIGN KEY (fileID) REFERENCES fileInfo (fileID)
+                )
+            ''')
+            conn.commit()
+            conn.close()
+
+    def delete_version(self, version, fileID):
+        with self.lock:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute('''
+                    DELETE FROM versionsLog 
+                    WHERE version = ? AND fileID = ?
+                ''', (version, fileID))
+                conn.commit()
+                if cursor.rowcount > 0:
+                    return {'status': 200, 'message': f'Version {version} deleted successfully.'}
+                else:
+                    return {'status': 404, 'message': 'Version not found.'}
+            except Exception as e:
+                return {'status': 500, 'message': str(e)}
+            finally:
+                conn.close()
+
+    def add_version(self, fileID, content):
+        with self.lock:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            try:
+                # Get latest version for this fileID
+                cursor.execute('''
+                    SELECT MAX(version) as max_version FROM versionsLog WHERE fileID = ?
+                ''', (fileID,))
+                row = cursor.fetchone()
+                next_version = (row[0] or 0) + 1
+
+                # Insert with manually incremented version
+                cursor.execute('''
+                    INSERT INTO versionsLog (version, fileID, content)
+                    VALUES (?, ?, ?)
+                ''', (next_version, fileID, content))
+
+                conn.commit()
+                return {'status': 201, 'message': f'Version {next_version} added successfully.'}
+            except Exception as e:
+                return {'status': 500, 'message': str(e)}
+            finally:
+                conn.close()
+
+    def get_version(self, version, fileID):
+        with self.lock:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM versionsLog 
+                WHERE version = ? AND fileID = ?
+            ''', (version, fileID))
+            version = cursor.fetchone()
+            return version
+
+    def get_versions_by_fileID(self, fileID):
+        with self.lock:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT version,
+                       date(timeStamp) as date,
+                       time(timeStamp) as time
+                FROM versionsLog 
+                WHERE fileID = ?
+                ORDER BY version ASC
+            ''', (fileID,))
+            versions = cursor.fetchall()
+            return versions
+
+    def get_db_connection(self):
+        conn = sqlite3.connect(self.db_path)
+        return conn
+
+
+
+
+    
 def main():
     ChangeLogDatabase("/Users/hila/CEOs/users.db").create_change_log_table()
     FilePermissionsDatabase("/Users/hila/CEOs/users.db").create_file_permissions_table()
     FileInfoDatabase("/Users/hila/CEOs/users.db").create_file_info_table()
     UserDatabase("/Users/hila/CEOs/users.db").create_user_database()
+    VersionDatabase("/Users/hila/CEOs/users.db").create_version_table()
+    
+
+
+    
     print("fin")
 
 if __name__ == "__main__":
