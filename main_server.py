@@ -574,28 +574,28 @@ def handle_client(client_socket, client_address, num_thread):
                         response = user_db.login(username, password)
                         client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
                     
-                    elif "/grant-user-to-file" in headers_data:
-                        #print("headers_data: " + headers_data)
+                    elif "/grant-user-to-file" in headers_data or "/revoke-user-to-file" in headers_data:
                         body = client_socket.recv(content_length).decode()
                         data = json.loads(body)
-                        fileID = data.get('fileID')
                         username = data.get('username')
                         userID = user_db.get_user_id(username)
-                        if not file_db.is_owner(fileID, userID):
-                            client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
-                        response = file_permissions_db.grant_access(fileID,userID)
-                        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+                        fileID = data.get('fileID')
+                        ownerID = get_header(client_socket,headers_data,r'ownerID:\s*(\d+)')
 
-                    elif "/revoke-user-to-file" in headers_data:
-                        body = client_socket.recv(content_length).decode()
-                        data = json.loads(body)
-                        fileID = data.get('fileID')
-                        username = data.get('username')
-                        userID = user_db.get_user_id(username)
-                        if not file_db.is_owner(fileID, userID):
+                        if userID == None:
+                            client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not a user!!"), "application/json").encode())  
+
+                        elif not file_db.is_owner(int(fileID), int(ownerID)):
                             client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
-                        response = file_permissions_db.revoke_access(fileID,userID)
-                        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+
+                        else:
+                            if "/revoke-user-to-file" in headers_data:
+                                response = file_permissions_db.revoke_access(fileID,userID)
+                                client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+                            elif "/grant-user-to-file" in headers_data:
+                                response = file_permissions_db.grant_access(fileID,userID)
+                                client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+
                     
                     elif "/save-new-version" in headers_data:
                         print("in save-new-version")

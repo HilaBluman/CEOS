@@ -84,7 +84,7 @@ class UserDatabase:
         cursor.execute('SELECT userID FROM users WHERE username = ?', (username,))
         result = cursor.fetchone()
         conn.close()
-        return result[0] if result else None
+        return int(result[0]) if result else None
 
 class FileInfoDatabase:
     def __init__(self, db_path):

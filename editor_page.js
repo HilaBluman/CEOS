@@ -378,6 +378,7 @@ function get_password(){
     return sessionStorage.getItem('password');}
 function get_userID(){
     userID = sessionStorage.getItem('userId');
+    console.log(userID);
     return userID}
 
 function isTextHighlighted() {
@@ -1190,6 +1191,7 @@ async function accessUser(usernameInput,request) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'ownerID': userID  //if this function is calld the user is the owner - just to be safe there is a check on the server side
             },
             body: JSON.stringify({ username, fileID }),
         });
@@ -1201,12 +1203,13 @@ async function accessUser(usernameInput,request) {
             usernameInput.value = ''; 
             loadFileDetails(); 
         } else {
-            showNotification(data.message, 'error');
+            console.log(data)
+            showNotification(data, 'error');
         }
         
     } catch (error) {
         console.error('Error :', error);
-        showNotification(error.message, 'error');
+        showNotification(error, 'error');
     }
 }
 
