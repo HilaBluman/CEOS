@@ -344,7 +344,27 @@ class FilePermissionsDatabase:
             return True  # User has access to the file
         else:
             return False  # User does not have access to the file
+    
+    def is_editor_or_owner(self, fileID, userID):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
         
+        cursor.execute('''
+            SELECT role
+            FROM filePermissions as fp
+            WHERE fp.fileID = ? AND fp.userID = ?
+        ''', (fileID, userID))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            if result['role'] == 'editor' or result['role'] == 'owner':
+                return True  
+            else:
+                return False 
+        else:
+            return False  
 
     def get_users_with_access(self, file_id):
         conn = self.get_db_connection()
@@ -549,6 +569,17 @@ class VersionDatabase:
             ''', (version, fileID))
             version = cursor.fetchone()
             return version
+
+    def get_version_fullcontent(self, version, fileID):
+        with self.lock:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT content FROM versionsLog 
+                WHERE version = ? AND fileID = ?
+            ''', (version, fileID))
+            content = cursor.fetchone()
+            return content
 
     def get_versions_by_fileID(self, fileID):
         with self.lock:

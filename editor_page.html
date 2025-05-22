@@ -21,6 +21,18 @@
         </div>
     </header>
   
+    <!-- Slide-in Menu -->
+    <div id="slide-menu" class="slide-menu">
+        <div class="slide-menu-content">
+            <button onclick="window.location.href='editor_page.html'" class="menu-button">
+                <span class="menu-icon">🏠</span> Home
+            </button>
+            <button onclick="window.location.href='home_page.html'" class="menu-button">
+                <span class="menu-icon">🚪</span> Log Out
+            </button>
+        </div>
+    </div>
+
   <div class="platform">
     <div class="sidebar">
       <div class="user-info">
@@ -92,6 +104,11 @@
       </tbody>
   </table>
   <input type="text" id="username-action" placeholder="Enter username">
+  <select id="role-action">
+    <option value="">Select role</option>
+    <option value="editor">Editor</option>
+    <option value="viewer">Viewer</option>
+  </select>
   <button id="grant-user-btn">Grant Access</button>
   <button id="revoke-user-btn">Revoke Access</button>
   <button id="delete-file-btn" onclick="confirmDelete('file')">Delete File</button>
@@ -127,9 +144,10 @@
           <!-- versions list will be added here -->
       </tbody>
   </table>
-  <input type="text" id="delete-version-action" placeholder="Version to delete">
-  <button id="save-version-btn" onclick="saveNewVersion('version')">Save New Version</button>
+  <input type="text" id="input-version-btn" placeholder="Choose a Version">
+  <button id="show-version-btn" onclick="showVersion()">Show Version</button>
   <button id="delete-version-btn" onclick="confirmDelete('version')">Delete Version</button>
+  <button id="save-version-btn" onclick="saveNewVersion('version')">Save New Version</button>
   <button id="close-panel-V-btn">Close</button>
 </div>
 

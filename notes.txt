@@ -24,31 +24,28 @@ applyUpdate:
 
 
 important:
-⚪️ add an option to open the version to look at and copy (show like a viewer can add togther)
-✔️ problam with nodifctions for grent and revoke (but is works)
-⚪️ fix time stamp in version
-✔️ delete file
-✔️ problam with new file dont know why(i think it is because of the acces)
-✔️ add a check in the server side if the client is the owner of teh file before revoking or allowing acces to file
-? add meaningful errors msg on the cilent side
-✔️ regular back ups - owner and editors can save versions (one file can only have 5 versions, when new version but 5 delete the first one )
 ⚪️ delete the last line - fix (when empty it is the real problam)
-⚪️ when pasting "&lt;/&gt" because of & - fix
-⚪️ check the cmd/ctr z end cases
+⚪️ when entering & to the code editor
 
 
 less significant:
 * what is async??? (read about it)
-* needs to be able to donwload files.
 ⚪️ fix resizing - so right panle will show all ways
+⚪️ fix time stamp in version
 ⚪️ the icon is not loading
-⚪️ add viewer option
-⚪️ logout!!!
 ⚪️ need to not let the server acces the rest of my computer only CEOs folder and within
 
 
 
 done:
+✔️ add viewer option
+✔️ logout!!!
+✔️ add an option to open the version to look at and copy (show like a viewer can add togther)
+✔️ problam with nodifctions for grent and revoke (but is works)
+✔️ delete file
+✔️ problam with new file dont know why(i think it is because of the acces)
+✔️ add a check in the server side if the client is the owner of teh file before revoking or allowing acces to file
+✔️ regular back ups - owner and editors can save versions (one file can only have 5 versions, when new version but 5 delete the first one )
 ✔️ replaces the nodifctions to the good ones (red and green)
 ✔️ add a refresh to the file tree
 ✔️ when highlighting a content and pasting - one line highlight paste problam

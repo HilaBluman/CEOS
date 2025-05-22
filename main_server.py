@@ -196,7 +196,7 @@ def get_header(client_socket, headers_data, header=r'filename:\s*(\S+)'):
     header_match = re.search(header, headers_data)
     if not header_match:
         client_socket.send(ready_to_send("406 Not Acceptable", f" header not found", "text/plain").encode())
-        return "header not found file"
+        return None
     return header_match.group(1)
 
 def get_filename(client_socket, headers_data):
@@ -290,10 +290,57 @@ def modify_file(row, action, content, file_path, linesLength):
         print(e)
         raise ValueError(f"An error occurred: {e}")
     
+def show_version(file_id,user_id,version,client_socket):
+    if not file_id or not user_id or not version:
+        raise ValueError("File ID, User ID or Version not provided")
+    elif not file_permissions_db.is_editor_or_owner(file_id, user_id):
+        raise ValueError("User does not have promison to see versions")
+    fullcontent = version_log_db.get_version_fullcontent(version,file_id)
+    print("fullcontent: " + fullcontent[0])
+    if fullcontent is None:
+        response = ready_to_send("404 Not Found", json.dumps({"error": "Version or content not found"}), "application/json")
+    else:
+        response = ready_to_send("200 OK", json.dumps({"fullContent": fullcontent[0]}), "application/json")
+    client_socket.send(response.encode())
+
+def save_modification(client_socket, file_id, file_name, file_path, match1, user_id):
+    if not os.path.exists(file_path):
+        if file_name == "File not found":
+            print(f"File {file_id} does not exist in the database or path.")
+            client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
+        else:
+            print(f"File {file_id} does not exist in the path.")
+            client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
+    elif file_name == "File not found":
+        print(f"File {file_id} does not exist in the database.")
+        client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
+    else:
+        modification_data = urllib.parse.unquote(match1.group(1)) 
+        try:
+            modification = json.loads(modification_data)
+            print("modification:", modification)
+            print("modification['content']:", modification['content'])
+
+            content = modification['content'] 
+                
+            try:
+                print(f"trying: {modification['row']}, {modification['action']}, {content}, {file_path} ")
+                modification['action'] = modify_file(modification['row'], modification['action'], content, file_path, modification['linesLength'])
+                msg = "File modified successfully."
+                if modification['action'] in ["paste", "update delete row below"]:
+                    content = content + "\n"
+                change_log_db.add_modification(file_id, modification, user_id)  
+            except Exception as e:
+                msg = f"Error modifying file: {str(e)}"
+            print(msg)
+            client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error: {e}")
+
 def handle_client(client_socket, client_address, num_thread):
     PATH_TO_FOLDER = r"/Users/hila/CEOs"  # for windows change to C:\webroot\ for mac /Users/hila/webroot
-    FORBIDDEN = {PATH_TO_FOLDER + r"/status_code/404.png", PATH_TO_FOLDER + r"/status_code/life.txt",
-                 PATH_TO_FOLDER + r"/status_code/500.png"}
+    FORBIDDEN = {f"{PATH_TO_FOLDER}/status_code/404.png", f"{PATH_TO_FOLDER}/status_code/life.txt",
+                 f"{PATH_TO_FOLDER}/status_code/500.png"}
 
     try:
         try:
@@ -354,43 +401,8 @@ def handle_client(client_socket, client_address, num_thread):
                     file_name = file_db.get_filename_by_id(file_id)['filename']
                     user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
                     file_path = PATH_TO_FOLDER + "/uploads/" + file_name
-
-                    if not os.path.exists(file_path):
-                        if file_name == "File not found":
-                            print(f"File {file_id} does not exist in the database or path.")
-                            client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
-                        else:
-                            print(f"File {file_id} does not exist in the path.")
-                            client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
-                    elif file_name == "File not found":
-                        print(f"File {file_id} does not exist in the database.")
-                        client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
-
-
-                    else:
-                        modification_data = urllib.parse.unquote(match1.group(1)) 
-                        try:
-                            modification = json.loads(modification_data)
-                            print("modification:", modification)
-                            print("modification['content']:", modification['content'])
-
-                            content = modification['content'] 
-                            #print("content: ", content)
-                                
-                            try:
-                                print(f"trying: {modification['row']}, {modification['action']}, {content}, {file_path} ")
-                                modification['action'] = modify_file(modification['row'], modification['action'], content, file_path, modification['linesLength'])
-                                msg = "File modified successfully."
-                                if modification['action'] in ["paste", "update delete row below"]:
-                                    content = content + "\n"
-                                # Log the change only if successful
-                                change_log_db.add_modification(file_id, modification, user_id)  
-                            except Exception as e:
-                                msg = f"Error modifying file: {str(e)}"
-                            print(msg)
-                            client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
-                        except json.JSONDecodeError as e:
-                            print(f"JSON decode error: {e}")
+                    save_modification(client_socket, file_id, file_name, file_path, match1, user_id)
+                    
                         
                 elif "/get-file-details" in headers_data:
                     try:
@@ -399,17 +411,13 @@ def handle_client(client_socket, client_address, num_thread):
                         if not file_id:
                             raise ValueError("File ID not provided")
 
-                        # Get file details from database
                         file_details = file_db.get_file_details(file_id)
                         if not file_details:
                             response = ready_to_send("404 Not Found", json.dumps({"error": "File not found"}), "application/json")
                             client_socket.send(response.encode())
                             return
-                        # Get users with access to this file
+
                         users_with_access = file_permissions_db.get_users_with_access(file_id)
-                        #owner_username_user_id = 
-                        
-                        # Prepare response data
                         response_data = {
                             "filename": file_details['filename'],
                             "users": users_with_access,
@@ -463,12 +471,32 @@ def handle_client(client_socket, client_address, num_thread):
                         print(f"Error in get-version-details: {str(e)}")
                         error_response = json.dumps({"error": str(e)})
                         client_socket.send(ready_to_send("500 Internal Server Error", error_response, "application/json").encode())
+
+                elif "/show-version" in headers_data:
+                    print("in /show-version")
+                    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
+                    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
+                    version = get_header(client_socket, headers_data, r'version:\s*(\d+)')
+                    show_version(file_id, user_id, version, client_socket)
+                
+                elif "/check-viewer-status" in headers_data:
+                    file_id = get_header(client_socket, headers_data, r'fileId:\s*(\d+)')
+                    user_id = get_header(client_socket, headers_data, r'userId:\s*(\d+)')
+                    if not file_id or not user_id:
+                        raise ValueError("File ID or User ID not provided")
+                    is_editor_or_owner = file_permissions_db.is_editor_or_owner(file_id, user_id)
+                    response = ready_to_send("200 OK", json.dumps({"isViewer": not is_editor_or_owner}), "application/json")
+                    client_socket.send(response.encode())
+                    
                 
                 elif "/new-file" in headers_data:
                     print("New file")
                     user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)')
                     filename = get_header(client_socket, headers_data, r'filename:\s*(\S+)')
                     response = new_file(client_socket, PATH_TO_FOLDER, headers_data)
+                    if not response:
+                        raise Exception("File creation failed")
+                    client_socket.send(response.encode())
 
                 elif "/load" in headers_data:
                     try:
@@ -477,6 +505,8 @@ def handle_client(client_socket, client_address, num_thread):
                         file_status_and_name = file_db.get_filename_by_id(fileId)
                         filename = file_status_and_name['filename']
                         status = file_status_and_name['status']
+                        if not fileId:
+                            raise ValueError("File ID not provided")
                         if status == 404:
                             print(filename)
                             response = ready_to_send("404 Not Found", filename, "application/json")
@@ -580,12 +610,13 @@ def handle_client(client_socket, client_address, num_thread):
                         username = data.get('username')
                         userID = user_db.get_user_id(username)
                         fileID = data.get('fileID')
+                        role = data.get('role')
                         ownerID = get_header(client_socket,headers_data,r'ownerID:\s*(\d+)')
 
-                        if userID == None:
+                        if not userID :
                             client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not a user!!"), "application/json").encode())  
 
-                        elif not file_db.is_owner(int(fileID), int(ownerID)):
+                        elif not ownerID or not file_db.is_owner(int(fileID), int(ownerID)):
                             client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
 
                         else:
@@ -593,7 +624,7 @@ def handle_client(client_socket, client_address, num_thread):
                                 response = file_permissions_db.revoke_access(fileID,userID)
                                 client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
                             elif "/grant-user-to-file" in headers_data:
-                                response = file_permissions_db.grant_access(fileID,userID)
+                                response = file_permissions_db.grant_access(fileID,userID,role)
                                 client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
 
                     

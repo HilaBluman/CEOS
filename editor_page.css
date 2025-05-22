@@ -392,7 +392,8 @@ button:hover {
   margin-top: 20px;
 }
 
-#file-details input[type="text"], #versions-details input[type="text"] {
+#file-details input[type="text"], #versions-details input[type="text"],
+#file-details select, #versions-details select {
   margin-bottom: 15px;
   width: 100%;
   padding: 8px;
@@ -400,6 +401,29 @@ button:hover {
   border-radius: 4px;
   background-color: var(--primary);
   color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+}
+
+#file-details select:hover, #versions-details select:hover {
+  border-color: #742ede;
+}
+
+#file-details select:focus, #versions-details select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(185, 133, 249, 0.2);
+}
+
+#file-details select option, #versions-details select option {
+  background-color: var(--primary);
+  color: var(--text);
+  padding: 8px;
+}
+
+#file-details select option:hover, #versions-details select option:hover {
+  background-color: var(--accent);
+  color: var(--secondary);
 }
 
 #file-details #delete-file-btn, #versions-details #delete-version-btn {
@@ -500,4 +524,52 @@ button:hover {
 
 .popup-buttons button:last-child:hover {
     background-color: #5a6268;
+}
+
+/* Slide-in Menu */
+.slide-menu {
+    position: fixed;
+    top: 50px;
+    left: -250px;
+    width: 250px;
+    height: calc(100vh - 50px);
+    background: #663aaa;
+    transition: left 0.3s ease;
+    z-index: 1000;
+    border-right: 1px solid var(--accent);
+}
+
+.slide-menu.open {
+    left: 0;
+}
+
+.slide-menu-content {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.menu-button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px;
+    background-color: var(--secondary);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.menu-button:hover {
+    background-color: var(--accent);
+    color: var(--secondary);
+    transform: translateX(5px);
+}
+
+.menu-button .menu-icon {
+    font-size: 1.2em;
 }

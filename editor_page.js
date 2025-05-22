@@ -184,6 +184,7 @@ let isPaste = false;
 let isHighlighted = false;
 let Loadeing = false;
 let isDelete = false;
+let isViewer = false;
 let highlightedTxt = {start: -1, end: -1, selectedText: ""}
 let pollingInterval;
 
@@ -518,15 +519,39 @@ function selectFile(fileId, filename) {
         const extension = filename.split('.').pop()
         changeEditorLanguage(extension);
     } 
+
+    checkViewerStatus();
 }
 
+async function checkViewerStatus() {
+    try {
+        const response = await fetch('/check-viewer-status', {
+            method: 'GET',
+            headers: {
+                'fileId': selectedFileId,
+                'userId': userID
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        isViewer = data.isViewer;
+        console.log("isViewer:", isViewer);
+        setEditorReadOnly(isViewer); // Disable editing if the user is a viewer
+    } catch (error) {
+        console.error('Error checking viewer status:', error);
+        showNotification('Error checking file permissions', 'error');
+    }
+}
 
 async function GetUserFiles(userId) {
     try {
         const response = await fetch('/get-user-files', {
             method: 'GET',
             headers: {
-                'Content-Type': 'application/json',
                 'userId': userId
             }
         });
@@ -612,7 +637,6 @@ async function createNewFile(filename) {
             const response = await fetch('/new-file', {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
                     'userId': userID,
                     'filename': filename
                 }
@@ -719,6 +743,12 @@ async function applyUpdate(update) {
 
         let { range, content, decorations} = getRangeAndContent(update);
 
+        // Temporarily disable read-only mode to apply updates
+        const wasReadOnly = codeEditor.getOption(monaco.editor.EditorOption.readOnly);
+        if (wasReadOnly) {
+            codeEditor.updateOptions({ readOnly: false });
+        }
+
         codeEditor.executeEdits('', [{
             range: range,
             text: content
@@ -728,6 +758,11 @@ async function applyUpdate(update) {
         setTimeout(() => {
             codeEditor.deltaDecorations(decorationIds, []);
         }, 500);
+
+        // Restore read-only mode if it was enabled
+        if (wasReadOnly) {
+            codeEditor.updateOptions({ readOnly: true });
+        }
         
     } catch (error) {
         console.error('Error applying partial update:', error);
@@ -829,7 +864,6 @@ async function pollForUpdates() {
         const response = await fetch('/poll-updates', {
             method: 'GET',
             headers: {
-                'Content-Type': 'application/json',
                 'fileID': fileID,
                 'userID': userID,
                 'lastModID': lastModID,
@@ -978,7 +1012,6 @@ async function loadVersionDetails() {
         const response = await fetch('/get-version-details', {
             method: 'GET',
             headers: {
-                'Content-Type': 'application/json',
                 'fileID': fileID
             }
         });
@@ -1045,12 +1078,11 @@ function confirmDeleteAction(confirmed) {
 }
 
 async function deleteVersion() {
-    const version = document.getElementById('delete-version-action').value.trim();
+    const version = document.getElementById('input-version-btn').value.trim();
     try {
         const response = await fetch('/delete-version', {
             method: 'DELETE',
             headers: {
-                'Content-Type': 'application/json',
                 'fileID': fileID,
                 'userID': userID,
                 'version': version
@@ -1075,7 +1107,6 @@ async function deleteFile(){
         const response = await fetch('/delete-file', {
             method: 'DELETE',
             headers: {
-                'Content-Type': 'application/json',
                 'fileID': fileID,
                 'userID': userID
             }
@@ -1111,7 +1142,6 @@ async function loadFileDetails() {
         const response = await fetch('/get-file-details', {
             method: 'GET',
             headers: {
-                'Content-Type': 'application/json',
                 'fileID': fileID
             }
         });
@@ -1126,7 +1156,7 @@ async function loadFileDetails() {
         const isOwner = data.owner_id === parseInt(userID);
         
         // Show/hide user management controls based on ownership
-        const userManagementControls = document.querySelectorAll('#username-action, #grant-user-btn, #revoke-user-btn, #delete-file-btn');
+        const userManagementControls = document.querySelectorAll('#username-action,#role-action, #grant-user-btn, #revoke-user-btn, #delete-file-btn');
         userManagementControls.forEach(control => {
             control.style.display = isOwner ? 'block' : 'none';
         });
@@ -1171,19 +1201,19 @@ function hasValidExtension(filename) {
     return validExtensions.includes(extension.toLowerCase());
 }
 
-async function accessUser(usernameInput,request) {
-    const username = usernameInput.value.trim();
+async function accessUser(usernameInput, request, roleInput) {
+    const username = document.getElementById('username-action').value.trim();
+    const role = document.getElementById('role-action').value.trim().toLowerCase();
     if (!username) {
-        showNotification('Please enter a username', 'error');;
+        showNotification('Please enter a username', 'error');
         return;
     }
-    let prompt;
 
-    if (request === "granted"){
+    let prompt;
+    if (request === "granted") {
         prompt = '/grant-user-to-file';
-    }
-    else{
-        prompt ='/revoke-user-to-file';
+    } else {
+        prompt = '/revoke-user-to-file';
     }
 
     try {
@@ -1191,24 +1221,25 @@ async function accessUser(usernameInput,request) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'ownerID': userID  //if this function is calld the user is the owner - just to be safe there is a check on the server side
+                'ownerID': userID,      //if this function is called the user is the owner - just to be safe there is a check on the server side
             },
-            body: JSON.stringify({ username, fileID }),
+            body: JSON.stringify({ username, fileID, role }),
         });
 
         const data = await response.json();
 
         if (response.ok) {
-            showNotification('Access ' + request + ' successfuly! the user needs to refresh the files!', 'success');
+            showNotification('Access ' + request + ' successfully! The user needs to refresh the files!', 'success');
             usernameInput.value = ''; 
+            roleInput.value = '';
             loadFileDetails(); 
         } else {
-            console.log(data)
-            showNotification(data, 'error');
+            console.log(data);
+            showNotification(data.message, 'error');
         }
         
     } catch (error) {
-        console.error('Error :', error);
+        console.error('Error:', error);
         showNotification(error, 'error');
     }
 }
@@ -1217,19 +1248,21 @@ async function accessUser(usernameInput,request) {
 document.addEventListener('DOMContentLoaded', () => {
     const grantUserBtn = document.getElementById('grant-user-btn');
     const usernameInput = document.getElementById('username-action');
+    const roleInput = document.getElementById('role-action');
     
-    if (grantUserBtn && usernameInput) {
-        grantUserBtn.addEventListener('click', () => accessUser(usernameInput, "granted"));
+    if (grantUserBtn && usernameInput && roleInput) {
+        grantUserBtn.addEventListener('click', () => accessUser(usernameInput, "granted", roleInput));
     }
 });
 
-// Add event listener for the add user button
+// Add event listener for the revoke user button
 document.addEventListener('DOMContentLoaded', () => {
     const revokeUserBtn = document.getElementById('revoke-user-btn');
     const usernameInput = document.getElementById('username-action');
+    const roleInput = document.getElementById('role-action');
     
-    if (revokeUserBtn && usernameInput) {
-        revokeUserBtn.addEventListener('click', () => accessUser(usernameInput, "revoked"));
+    if (revokeUserBtn && usernameInput && roleInput) {
+        revokeUserBtn.addEventListener('click', () => accessUser(usernameInput, "revoked", roleInput));
     }
 });
 
@@ -1275,8 +1308,38 @@ async function saveNewVersion() {
     }
 }
 
+async function showVersion(){
+    isViewer = true;
+    const version = document.getElementById('input-version-btn').value.trim();
+    try {
+        const response = await fetch('/show-version', {
+            method: 'GET',
+            headers: {
+                'fileID': fileID,
+                'userID': userID,
+                'version': version
+            }
+        });
 
+        const data = await response.json();
+        console.log("data.fullContent: " + data.fullContent)
 
+        if (data.fullContent) {
+            Loadeing = true;
+            const currentFileTab = document.getElementById('current-file-tab');
+
+            currentFileTab.textContent = selectedFileName + " - V" + version;
+            codeEditor.setValue(data.fullContent);
+            setEditorReadOnly(true);  // Disable editing in viewer mode
+            stopPolling()
+        }
+    }
+    catch (error) {
+        console.error('Error saving showing version:', error);
+        showNotification('Error saving showing version', 'error');
+    }
+    
+}
 
 
 async function refreshFiles(){
@@ -1310,4 +1373,32 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     }
 });  
+
+function setEditorReadOnly(isReadOnly) {
+    useCodeEditor((editor) => {
+        editor.updateOptions({
+            readOnly: isReadOnly
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const menuIcon = document.querySelector('.menu-icon');
+    const slideMenu = document.getElementById('slide-menu');
+    
+    menuIcon.addEventListener('click', () => {
+        slideMenu.classList.toggle('open');
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (event) => {
+        if (!slideMenu.contains(event.target) && !menuIcon.contains(event.target)) {
+            slideMenu.classList.remove('open');
+        }
+    });
+});
+
+function closeFilePopup() {
+    document.getElementById('file-popup').style.display = 'none';
+}
 
