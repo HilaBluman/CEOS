@@ -6,8 +6,10 @@ import threading
 import urllib.parse
 import fcntl
 from difflib import SequenceMatcher
-from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase
+from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase, EncryptionHandler
 import html
+import argon2
+
 # Create an instance at the start of your server
 DB_PATH = "/Users/hila/CEOs/users.db"
 user_db = UserDatabase(DB_PATH)
@@ -175,12 +177,13 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value = ""):
             # Get the file ID of the newly created file
             file_id = file_db.check_file_exists(user_id, filename)
             print("fileID: " + str(file_id))
-            result = file_permissions_db.grant_access(file_id, user_id,"owner") # got 500 stutus every time
-            print("after grant_access to owner, result: " + str(result["status"]) + " " +result["message"] )
+            result2 = file_permissions_db.grant_access(file_id, user_id,"owner") # got 500 stutus every time
+            print("after grant_access to owner, result: " + str(result2["status"]) + " " +result2["message"] )
 
             data = json.dumps({
                 "success": "File created successfully",
-                "fileId": file_id
+                "fileId": file_id,
+                "AES_key": result["AES_key"]
             })
             # Send success response
             print("File created successfully")
@@ -315,13 +318,23 @@ def save_modification(client_socket, file_id, file_name, file_path, match1, user
         print(f"File {file_id} does not exist in the database.")
         client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
     else:
-        modification_data = urllib.parse.unquote(match1.group(1)) 
+        encrypted_modification = urllib.parse.unquote(match1.group(1))
         try:
-            modification = json.loads(modification_data)
+            # Get the AES key for this file
+            aes_key = file_db.get_aes_key(file_id)
+            if not aes_key:
+                raise ValueError("No AES key found for this file")
+
+            # Decrypt the modification data
+            decryption_result = EncryptionHandler.decrypt_connection_data(encrypted_modification, aes_key)
+            if decryption_result['status'] != 200:
+                raise ValueError(decryption_result['message'])
+
+            modification = json.loads(decryption_result['decrypted_data'])
             print("modification:", modification)
             print("modification['content']:", modification['content'])
 
-            content = modification['content'] 
+            content = modification['content']
                 
             try:
                 print(f"trying: {modification['row']}, {modification['action']}, {content}, {file_path} ")
@@ -336,6 +349,9 @@ def save_modification(client_socket, file_id, file_name, file_path, match1, user
             client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
         except json.JSONDecodeError as e:
             print(f"JSON decode error: {e}")
+        except Exception as e:
+            print(f"Error processing modification: {e}")
+            client_socket.send(ready_to_send("500 Internal Server Error", str(e), "text/plain").encode())
 
 def handle_client(client_socket, client_address, num_thread):
     PATH_TO_FOLDER = r"/Users/hila/CEOs"  # for windows change to C:\webroot\ for mac /Users/hila/webroot
@@ -524,10 +540,12 @@ def handle_client(client_socket, client_address, num_thread):
                                     })
 
                             print("loaded successfully")
+                            aes_key = file_db.get_aes_key(fileId)
                             lastModID = change_log_db.get_last_mod_id(fileId)
                             response_data = {
                                 'lastModID': lastModID,
-                                'fullContent': content
+                                'fullContent': content,
+                                'AES_key': aes_key
                             }
                             response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
                             client_socket.send(response.encode())
@@ -756,3 +774,20 @@ def start_main_server(host='127.0.0.1', port=8000):
         except Exception as e:
             print(f"Error accepting connection: {str(e)}")
 
+
+
+
+
+
+def hash_password(password: str):
+    ph = argon2.PasswordHasher()
+    hashed = ph.hash(password)
+    return hashed
+
+def verify_password(hashed_password: str, input_password: str):
+    ph = argon2.PasswordHasher()
+    try:
+        return ph.verify(hashed_password, input_password)
+    except argon2.exceptions.VerifyMismatchError:
+        return False
+    

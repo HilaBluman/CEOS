@@ -94,3 +94,10 @@ check on:
 1. https://www.geeksforgeeks.org/longest-common-subsequence-dp-4/
 2. https://interviewing.io/questions/longest-common-subsequence
 
+
+
+rsa when asking for load 
+then send AES to the client to use every time its about this file
+for each file different key.
+
+also rsa when new file than the client send the AES key to server to save in db
