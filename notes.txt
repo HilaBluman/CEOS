@@ -26,12 +26,12 @@ applyUpdate:
 important:
 ⚪️ delete the last line - fix (when empty it is the real problam)
 ⚪️ when entering & to the code editor
+⚪️ save the passwords encrypted
 
 
 less significant:
 * what is async??? (read about it)
 ⚪️ fix resizing - so right panle will show all ways
-⚪️ fix time stamp in version
 ⚪️ the icon is not loading
 ⚪️ need to not let the server acces the rest of my computer only CEOs folder and within
 

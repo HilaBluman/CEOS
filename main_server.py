@@ -6,10 +6,9 @@ import threading
 import urllib.parse
 import fcntl
 from difflib import SequenceMatcher
-from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase, EncryptionHandler
+from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase
 import html
 import argon2
-
 # Create an instance at the start of your server
 DB_PATH = "/Users/hila/CEOs/users.db"
 user_db = UserDatabase(DB_PATH)
@@ -177,13 +176,12 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value = ""):
             # Get the file ID of the newly created file
             file_id = file_db.check_file_exists(user_id, filename)
             print("fileID: " + str(file_id))
-            result2 = file_permissions_db.grant_access(file_id, user_id,"owner") # got 500 stutus every time
-            print("after grant_access to owner, result: " + str(result2["status"]) + " " +result2["message"] )
+            result = file_permissions_db.grant_access(file_id, user_id,"owner") # got 500 stutus every time
+            print("after grant_access to owner, result: " + str(result["status"]) + " " +result["message"] )
 
             data = json.dumps({
                 "success": "File created successfully",
-                "fileId": file_id,
-                "AES_key": result["AES_key"]
+                "fileId": file_id
             })
             # Send success response
             print("File created successfully")
@@ -318,23 +316,13 @@ def save_modification(client_socket, file_id, file_name, file_path, match1, user
         print(f"File {file_id} does not exist in the database.")
         client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
     else:
-        encrypted_modification = urllib.parse.unquote(match1.group(1))
+        modification_data = urllib.parse.unquote(match1.group(1)) 
         try:
-            # Get the AES key for this file
-            aes_key = file_db.get_aes_key(file_id)
-            if not aes_key:
-                raise ValueError("No AES key found for this file")
-
-            # Decrypt the modification data
-            decryption_result = EncryptionHandler.decrypt_connection_data(encrypted_modification, aes_key)
-            if decryption_result['status'] != 200:
-                raise ValueError(decryption_result['message'])
-
-            modification = json.loads(decryption_result['decrypted_data'])
+            modification = json.loads(modification_data)
             print("modification:", modification)
             print("modification['content']:", modification['content'])
 
-            content = modification['content']
+            content = modification['content'] 
                 
             try:
                 print(f"trying: {modification['row']}, {modification['action']}, {content}, {file_path} ")
@@ -349,9 +337,6 @@ def save_modification(client_socket, file_id, file_name, file_path, match1, user
             client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
         except json.JSONDecodeError as e:
             print(f"JSON decode error: {e}")
-        except Exception as e:
-            print(f"Error processing modification: {e}")
-            client_socket.send(ready_to_send("500 Internal Server Error", str(e), "text/plain").encode())
 
 def handle_client(client_socket, client_address, num_thread):
     PATH_TO_FOLDER = r"/Users/hila/CEOs"  # for windows change to C:\webroot\ for mac /Users/hila/webroot
@@ -370,16 +355,16 @@ def handle_client(client_socket, client_address, num_thread):
                 print(action)
                 return  # Exit the function
 
+            end = headers_data.find(r"HTTP") - 1
+            request = headers_data[:end]
 
-            if not "/poll-updates" in headers_data:
+            if not "/poll-updates" in request:
                     print("_________________________")
                     #print(f"Client {client_address} wants to: '{action}'")
 
             if action == "GET ":
-                end = headers_data.find(r"HTTP") - 1
-                request = headers_data[:end]
 
-                if "/poll-updates" in headers_data:
+                if "/poll-updates" in request:
                     try:
                         fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
                         lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)')
@@ -404,7 +389,7 @@ def handle_client(client_socket, client_address, num_thread):
                             print("Client disconnected during error handling")
                             return
 
-                elif "/save" in headers_data:
+                elif "/save" in request:
                     print("in save")
                     #check if file exist in path and if he is in the db - not exist but in db create one.
                     decoded_request = urllib.parse.unquote(request)
@@ -420,7 +405,7 @@ def handle_client(client_socket, client_address, num_thread):
                     save_modification(client_socket, file_id, file_name, file_path, match1, user_id)
                     
                         
-                elif "/get-file-details" in headers_data:
+                elif "/get-file-details" in request:
                     try:
                         print("in /get-file-details")
                         file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
@@ -447,7 +432,7 @@ def handle_client(client_socket, client_address, num_thread):
                         response = ready_to_send("500 Internal Server Error", error_response, "application/json")
                         client_socket.send(response.encode())
 
-                elif "/get-user-files" in headers_data:
+                elif "/get-user-files" in request:
                     try:
                         print("Getting user files")
                         user_id = get_header(client_socket, headers_data, r'userId:\s*(\d+)')
@@ -470,7 +455,7 @@ def handle_client(client_socket, client_address, num_thread):
                         response = ready_to_send("500 Internal Server Error", error_response, "application/json")
                         client_socket.send(response.encode())
                 
-                elif "/get-version-details" in headers_data:
+                elif "/get-version-details" in request:
                     try:
                         print("in /get-version-details")
                         file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
@@ -488,14 +473,14 @@ def handle_client(client_socket, client_address, num_thread):
                         error_response = json.dumps({"error": str(e)})
                         client_socket.send(ready_to_send("500 Internal Server Error", error_response, "application/json").encode())
 
-                elif "/show-version" in headers_data:
+                elif "/show-version" in request:
                     print("in /show-version")
                     file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
                     user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
                     version = get_header(client_socket, headers_data, r'version:\s*(\d+)')
                     show_version(file_id, user_id, version, client_socket)
                 
-                elif "/check-viewer-status" in headers_data:
+                elif "/check-viewer-status" in request:
                     file_id = get_header(client_socket, headers_data, r'fileId:\s*(\d+)')
                     user_id = get_header(client_socket, headers_data, r'userId:\s*(\d+)')
                     if not file_id or not user_id:
@@ -505,7 +490,7 @@ def handle_client(client_socket, client_address, num_thread):
                     client_socket.send(response.encode())
                     
                 
-                elif "/new-file" in headers_data:
+                elif "/new-file" in request:
                     print("New file")
                     user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)')
                     filename = get_header(client_socket, headers_data, r'filename:\s*(\S+)')
@@ -514,7 +499,7 @@ def handle_client(client_socket, client_address, num_thread):
                         raise Exception("File creation failed")
                     client_socket.send(response.encode())
 
-                elif "/load" in headers_data:
+                elif "/load" in request:
                     try:
                         print("Load")
                         fileId = get_header(client_socket, headers_data, r'fileId:\s*(\S+)')
@@ -540,12 +525,10 @@ def handle_client(client_socket, client_address, num_thread):
                                     })
 
                             print("loaded successfully")
-                            aes_key = file_db.get_aes_key(fileId)
                             lastModID = change_log_db.get_last_mod_id(fileId)
                             response_data = {
                                 'lastModID': lastModID,
-                                'fullContent': content,
-                                'AES_key': aes_key
+                                'fullContent': content
                             }
                             response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
                             client_socket.send(response.encode())
@@ -605,7 +588,7 @@ def handle_client(client_socket, client_address, num_thread):
                         raise ValueError("Content-Length header not found")
 
                     content_length = int(match.group(1))
-                    if "/signup" in headers_data:
+                    if "/signup" in request:
                         body = client_socket.recv(content_length).decode()
                         data = json.loads(body)
                         username = data.get('username')
@@ -613,7 +596,7 @@ def handle_client(client_socket, client_address, num_thread):
                         response = user_db.signup(username, password)
                         client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
 
-                    elif "/login" in headers_data:
+                    elif "/login" in request:
                         #print("headers_data: " + headers_data)
                         body = client_socket.recv(content_length).decode()
                         data = json.loads(body)
@@ -622,7 +605,7 @@ def handle_client(client_socket, client_address, num_thread):
                         response = user_db.login(username, password)
                         client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
                     
-                    elif "/grant-user-to-file" in headers_data or "/revoke-user-to-file" in headers_data:
+                    elif "/grant-user-to-file" in request or "/revoke-user-to-file" in request:
                         body = client_socket.recv(content_length).decode()
                         data = json.loads(body)
                         username = data.get('username')
@@ -638,15 +621,15 @@ def handle_client(client_socket, client_address, num_thread):
                             client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
 
                         else:
-                            if "/revoke-user-to-file" in headers_data:
+                            if "/revoke-user-to-file" in request:
                                 response = file_permissions_db.revoke_access(fileID,userID)
                                 client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
-                            elif "/grant-user-to-file" in headers_data:
+                            elif "/grant-user-to-file" in request:
                                 response = file_permissions_db.grant_access(fileID,userID,role)
                                 client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
 
                     
-                    elif "/save-new-version" in headers_data:
+                    elif "/save-new-version" in request:
                         print("in save-new-version")
                         print("headers_data: " + headers_data)
                         body = client_socket.recv(content_length).decode()
@@ -659,13 +642,13 @@ def handle_client(client_socket, client_address, num_thread):
                     
 
 
-                    elif "/disconnection" in headers_data:
+                    elif "/disconnection" in request:
                         body = ""
                         if content_length > 0:
                             body = client_socket.recv(content_length).decode()
                         return  # Exit the function
 
-                    elif "/upload-file" in headers_data: 
+                    elif "/upload-file" in request: 
                         print("------------------")
                         print("in uploads")
                         content = get_content_of_upload(client_socket, content_length)
@@ -681,7 +664,7 @@ def handle_client(client_socket, client_address, num_thread):
                     handle_500(client_socket)
 
             elif action == "DELETE":
-                if "/delete-version" in headers_data:
+                if "/delete-version" in request:
                     file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
                     user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
                     version = get_header(client_socket, headers_data, r'version:\s*(\d+)')
@@ -694,7 +677,7 @@ def handle_client(client_socket, client_address, num_thread):
                         result = version_log_db.delete_version(version,file_id)
                         client_socket.send(ready_to_send(result['status'], result["message"], "text/plain").encode())
 
-                elif "/delete-file" in headers_data:
+                elif "/delete-file" in request:
                     try:
                         
                         file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
@@ -748,7 +731,7 @@ def handle_client(client_socket, client_address, num_thread):
 
     finally:
         client_socket.close()
-        if not "/poll-updates" in headers_data: 
+        if not "/poll-updates" in request: 
             print(f"Disconnected client {client_address}")
             print("_________________________")
 
@@ -773,21 +756,3 @@ def start_main_server(host='127.0.0.1', port=8000):
 
         except Exception as e:
             print(f"Error accepting connection: {str(e)}")
-
-
-
-
-
-
-def hash_password(password: str):
-    ph = argon2.PasswordHasher()
-    hashed = ph.hash(password)
-    return hashed
-
-def verify_password(hashed_password: str, input_password: str):
-    ph = argon2.PasswordHasher()
-    try:
-        return ph.verify(hashed_password, input_password)
-    except argon2.exceptions.VerifyMismatchError:
-        return False
-    

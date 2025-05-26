@@ -192,7 +192,6 @@ let fileID = 0;     // changes after pciking a file
 let userID = 0;
 let username = "";
 let lastModID = -1; 
-let AES_key;
 
 let startWidth;
 let rightPanel;
@@ -456,134 +455,18 @@ async function saveAll() {
     Loadeing = false;
 }
 
-// Encryption handler class
-class EncryptionHandler {
-    static async encryptData(data, aesKey) {
-        try {
-            // Convert base64 key to bytes
-            const keyBytes = this.base64ToBytes(aesKey);
-            
-            // Generate random IV
-            const iv = crypto.getRandomValues(new Uint8Array(16));
-            
-            // Import the key
-            const key = await crypto.subtle.importKey(
-                'raw',
-                keyBytes,
-                { name: 'AES-CBC', length: 256 },
-                false,
-                ['encrypt']
-            );
-            
-            // Encrypt the data
-            const dataBytes = new TextEncoder().encode(data);
-            const encryptedBytes = await crypto.subtle.encrypt(
-                { name: 'AES-CBC', iv },
-                key,
-                dataBytes
-            );
-            
-            // Combine IV and encrypted data
-            const combined = new Uint8Array(iv.length + encryptedBytes.byteLength);
-            combined.set(iv);
-            combined.set(new Uint8Array(encryptedBytes), iv.length);
-            
-            // Convert to base64
-            return btoa(String.fromCharCode.apply(null, combined));
-        } catch (error) {
-            console.error('Encryption error:', error);
-            throw new Error('Failed to encrypt data');
-        }
-    }
-
-    static async decryptData(encryptedData, aesKey) {
-        try {
-            // Convert base64 key to bytes
-            const keyBytes = this.base64ToBytes(aesKey);
-            
-            // Decode base64 encrypted data
-            const encryptedBytes = this.base64ToBytes(encryptedData);
-            
-            // Extract IV and ciphertext
-            const iv = encryptedBytes.slice(0, 16);
-            const ciphertext = encryptedBytes.slice(16);
-            
-            // Import the key
-            const key = await crypto.subtle.importKey(
-                'raw',
-                keyBytes,
-                { name: 'AES-CBC', length: 256 },
-                false,
-                ['decrypt']
-            );
-            
-            // Decrypt the data
-            const decryptedBytes = await crypto.subtle.decrypt(
-                { name: 'AES-CBC', iv },
-                key,
-                ciphertext
-            );
-            
-            // Convert to string
-            return new TextDecoder().decode(decryptedBytes);
-        } catch (error) {
-            console.error('Decryption error:', error);
-            throw new Error('Failed to decrypt data');
-        }
-    }
-
-    static base64ToBytes(base64) {
-        const binaryString = atob(base64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        return bytes;
-    }
-
-    static async encryptConnectionData(data, aesKey) {
-        try {
-            const encryptedData = await this.encryptData(data, aesKey);
-            return {
-                status: 200,
-                message: 'Success',
-                encrypted_data: encryptedData
-            };
-        } catch (error) {
-            return {
-                status: 500,
-                message: error.message,
-                encrypted_data: null
-            };
-        }
-    }
-
-    static async decryptConnectionData(encryptedData, aesKey) {
-        try {
-            const decryptedData = await this.decryptData(encryptedData, aesKey);
-            return {
-                status: 200,
-                message: 'Success',
-                decrypted_data: decryptedData
-            };
-        } catch (error) {
-            return {
-                status: 500,
-                message: error.message,
-                decrypted_data: null
-            };
-        }
-    }
-}
-
 async function saveInput(modification) {
+
     try {
-        const response = await fetch(`/save?fileId=${fileId}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: `modification=${encodeURIComponent(JSON.stringify(modification))}`
+        const encodedModification = encodeURIComponent(modification);
+        const url = "/save?modification=" + encodedModification;
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 
+                'fileID': fileID,
+                "userID": userID,
+                'Connection': 'keep-alive'
+            }
         });
 
         if (!response.ok) {
@@ -591,28 +474,30 @@ async function saveInput(modification) {
         }
 
         const result = await response.text();
-        console.log('Save result:', result);
+        await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
-        console.error('Error saving modification:', error);
+        console.error('Error saving file:', error);
+        return
     }
 }
 
 async function loadContent(fileId) {
     try {
-        const response = await fetch(`/load?fileId=${fileId}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
+        const response = await fetch('/load', {
+            method: 'GET',
+            headers: { 
+                'fileId': fileId,
+                'Connection': 'keep-alive'
+            }
+        });
         const data = await response.json();
         if (data.fullContent) {
             Loadeing = true;
             lastModID = data.lastModID;
-            AES_key = data.AES_key;
             console.log("lastModID: " + lastModID);
             codeEditor.setValue(data.fullContent);
         }
-        startPolling();
+        //startPolling();
     } catch (error) {
         console.error('Error loading initial content:', error);
     }
@@ -770,7 +655,6 @@ async function createNewFile(filename) {
 
             if (data.fileId !== 0) {
                 fileID = data.fileId;
-                AES_key = data.AES_key;
             }
 
             const fileTree = document.querySelector('.file-tree');
@@ -823,12 +707,7 @@ async function uploadNewFile(fileContent, filename) {
         fileTree.appendChild(newFileItem);
 
         selectFile(result.fileId, filename);
-        Loadeing = true;
-        lastModID = 0;
-        fileID = result.fileId
-        AES_key = result.AES_key;
-        codeEditor.value = fileContent;
-        Loadeing = false;
+        await loadContent(result.fileId);
     } catch (error) {
         console.error('Error uploading file:', error);
         throw error;
@@ -1520,6 +1399,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function closeFilePopup() {
+    isViewer = true;
+    setEditorReadOnly(true);
     document.getElementById('file-popup').style.display = 'none';
 }
-

@@ -2,99 +2,7 @@ import json
 import sqlite3
 import random
 import threading
-import secrets
-import base64
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
 
-class EncryptionHandler:
-    @staticmethod
-    def encrypt_data(data, aes_key):
-        """
-        Encrypt data using AES-256-CBC with the provided key.
-        Returns base64 encoded encrypted data.
-        """
-        try:
-            # Convert the base64 key back to bytes
-            key = base64.b64decode(aes_key)
-            
-            # Generate a random IV
-            iv = secrets.token_bytes(16)
-            
-            # Create cipher
-            cipher = AES.new(key, AES.MODE_CBC, iv)
-            
-            # Pad and encrypt the data
-            padded_data = pad(data.encode(), AES.block_size)
-            encrypted_data = cipher.encrypt(padded_data)
-            
-            # Combine IV and encrypted data and encode to base64
-            return base64.b64encode(iv + encrypted_data).decode('utf-8')
-        except Exception as e:
-            print(f"Encryption error: {str(e)}")
-            return None
-
-    @staticmethod
-    def decrypt_data(encrypted_data, aes_key):
-        """
-        Decrypt AES-256-CBC encrypted data using the provided key.
-        Returns the decrypted string.
-        """
-        try:
-            # Convert the base64 key back to bytes
-            key = base64.b64decode(aes_key)
-            
-            # Decode the encrypted data from base64
-            encrypted_bytes = base64.b64decode(encrypted_data)
-            
-            # Extract IV and ciphertext
-            iv = encrypted_bytes[:16]
-            ciphertext = encrypted_bytes[16:]
-            
-            # Create cipher
-            cipher = AES.new(key, AES.MODE_CBC, iv)
-            
-            # Decrypt and unpad the data
-            decrypted_data = unpad(cipher.decrypt(ciphertext), AES.block_size)
-            
-            return decrypted_data.decode('utf-8')
-        except Exception as e:
-            print(f"Decryption error: {str(e)}")
-            return None
-
-    @staticmethod
-    def encrypt_connection_data(data, aes_key):
-        """
-        Encrypt data for connection and return a dictionary with encrypted data and status.
-        """
-        if not data or not aes_key:
-            return {'status': 400, 'message': 'Missing data or AES key'}
-        
-        encrypted_data = EncryptionHandler.encrypt_data(data, aes_key)
-        if not encrypted_data:
-            return {'status': 500, 'message': 'Encryption failed'}
-        
-        return {
-            'status': 200,
-            'encrypted_data': encrypted_data
-        }
-
-    @staticmethod
-    def decrypt_connection_data(encrypted_data, aes_key):
-        """
-        Decrypt data from connection and return a dictionary with decrypted data and status.
-        """
-        if not encrypted_data or not aes_key:
-            return {'status': 400, 'message': 'Missing encrypted data or AES key'}
-        
-        decrypted_data = EncryptionHandler.decrypt_data(encrypted_data, aes_key)
-        if not decrypted_data:
-            return {'status': 500, 'message': 'Decryption failed'}
-        
-        return {
-            'status': 200,
-            'decrypted_data': decrypted_data
-        }
 
 class UserDatabase:
     def __init__(self, db_path):
@@ -183,67 +91,6 @@ class FileInfoDatabase:
         self.db_path = db_path
         self.create_file_info_table()
 
-    def encrypt_data(self, data, aes_key):
-        """
-        Encrypt data using AES-256-CBC with the provided key.
-        Returns base64 encoded encrypted data.
-        """
-        try:
-            # Convert the base64 key back to bytes
-            key = base64.b64decode(aes_key)
-            
-            # Generate a random IV
-            iv = secrets.token_bytes(16)
-            
-            # Create cipher
-            cipher = AES.new(key, AES.MODE_CBC, iv)
-            
-            # Pad and encrypt the data
-            padded_data = pad(data.encode(), AES.block_size)
-            encrypted_data = cipher.encrypt(padded_data)
-            
-            # Combine IV and encrypted data and encode to base64
-            return base64.b64encode(iv + encrypted_data).decode('utf-8')
-        except Exception as e:
-            print(f"Encryption error: {str(e)}")
-            return None
-
-    def decrypt_data(self, encrypted_data, aes_key):
-        """
-        Decrypt AES-256-CBC encrypted data using the provided key.
-        Returns the decrypted string.
-        """
-        try:
-            # Convert the base64 key back to bytes
-            key = base64.b64decode(aes_key)
-            
-            # Decode the encrypted data from base64
-            encrypted_bytes = base64.b64decode(encrypted_data)
-            
-            # Extract IV and ciphertext
-            iv = encrypted_bytes[:16]
-            ciphertext = encrypted_bytes[16:]
-            
-            # Create cipher
-            cipher = AES.new(key, AES.MODE_CBC, iv)
-            
-            # Decrypt and unpad the data
-            decrypted_data = unpad(cipher.decrypt(ciphertext), AES.block_size)
-            
-            return decrypted_data.decode('utf-8')
-        except Exception as e:
-            print(f"Decryption error: {str(e)}")
-            return None
-
-    def generate_aes_key(self):
-        """
-        Generates a secure AES key using cryptographically strong random bytes.
-        Returns a base64 encoded string of 32 bytes (256 bits) which is suitable for AES-256.
-        """
-        key_bytes = secrets.token_bytes(32)
-        key_string = base64.b64encode(key_bytes).decode('utf-8')
-        return key_string
-
     def create_file_info_table(self):
         conn = self.get_db_connection()
         cursor = conn.cursor()
@@ -254,7 +101,6 @@ class FileInfoDatabase:
                 fileID INTEGER UNIQUE PRIMARY KEY,
                 filename TEXT NOT NULL,
                 ownerID INTEGER,
-                aes_key TEXT UNIQUE,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (ownerID) REFERENCES users(userID)
@@ -288,24 +134,10 @@ class FileInfoDatabase:
             return True  # The user is the owner of the file
         else:
             return False  # The user is not the owner of the file
-
     def get_db_connection(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
-
-    def get_aes_key(self, file_id):
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute('SELECT aes_key FROM fileInfo WHERE fileID = ?', (file_id,))
-            result = cursor.fetchone()
-            return result['aes_key'] if result else None
-        except Exception as e:
-            print(f"Error getting AES key: {str(e)}")
-            return None
-        finally:
-            conn.close()
 
     def check_file_exists(self, ownerID, filename):
         conn = self.get_db_connection()
@@ -328,44 +160,21 @@ class FileInfoDatabase:
         finally:
             conn.close()
 
-    def check_aes_key_exists(self, aes_key):
-        """
-        Checks if an AES key already exists in the database.
-        Returns True if the key exists, False otherwise.
-        """
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute('SELECT COUNT(*) FROM fileInfo WHERE aes_key = ?', (aes_key,))
-            count = cursor.fetchone()[0]
-            return count > 0
-        except Exception as e:
-            return False
-        finally:
-            conn.close()
-
     def add_file(self, filename, ownerID):
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
-        while True:
-            aes_key = self.generate_aes_key()
-            if not self.check_aes_key_exists(aes_key):
-                break
-        
         try:
-            cursor.execute('INSERT INTO fileInfo (filename, ownerID, aes_key) VALUES (?, ?, ?)', 
-                         (filename, ownerID, aes_key))
+            cursor.execute('INSERT INTO fileInfo (filename, ownerID) VALUES (?, ?)', (filename, ownerID))
             conn.commit()
-            return {'status': 201, 'message': 'File created successfully.', 'AES_key': aes_key}
+            return {'status': 201, 'message': 'File created successfully.'}
         except sqlite3.IntegrityError:
-            return {'status': 409, 'message': 'File name already exists.', 'AES_key': aes_key }
+            return {'status': 409, 'message': 'File name already exists.'}
         except Exception as e:
-            return {'status': 500, 'message': str(e), 'AES_key': aes_key }
+            return {'status': 500, 'message': str(e)}
         finally:
             conn.close()
 
-    # not in use add use.
     def update_file_timestamp(self, fileID):
         conn = self.get_db_connection()
         cursor = conn.cursor()
