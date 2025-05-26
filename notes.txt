@@ -26,7 +26,8 @@ applyUpdate:
 important:
 ⚪️ delete the last line - fix (when empty it is the real problam)
 ⚪️ when entering & to the code editor
-⚪️ save the passwords encrypted
+⚪️ save the passwords encrypted hash
+⚪️ remove the key when delteing file
 
 
 less significant:

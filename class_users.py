@@ -2,7 +2,7 @@ import json
 import sqlite3
 import random
 import threading
-
+import argon2
 
 class UserDatabase:
     def __init__(self, db_path):
@@ -35,26 +35,38 @@ class UserDatabase:
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
-        while True:
-            userID = random.randint(1000, 9999)  # Generate a random userID
-            cursor.execute('SELECT COUNT(*) FROM users WHERE userID = ?', (userID,))
-            count = cursor.fetchone()[0]
-            if count == 0:  # If userID is unique
-                return userID  # Return the unique userID
+        max_attempts = 100  # Prevent infinite loop
+        attempts = 0
+        
+        try:
+            while attempts < max_attempts:
+                userID = random.randint(1000, 9999) 
+                cursor.execute('SELECT COUNT(*) FROM users WHERE userID = ?', (userID,))
+                count = cursor.fetchone()[0]
+                if count == 0:  
+                    return userID  
+                attempts += 1
+            
+            
+            raise Exception("Unable to generate unique userID after maximum attempts")
+        finally:
+            conn.close() 
 
     def signup(self, username, password):
-        # Check password length
         if len(password) < 4:
             return {'status': 400, 'message': 'Password must be at least 4 characters long.'}
+
+        try:
+            userID = self.generate_unique_userID() 
+        except Exception as e:
+            return {'status': 500, 'message': 'Failed to generate unique user ID'}
 
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
-        userID = self.generate_unique_userID()  # Get a unique userID
-
+        password_hash = self.hash_password(password)
         try:
-            # Insert the userID, username, and password
-            cursor.execute('INSERT INTO users (userID, username, password) VALUES (?, ?, ?)', (userID, username, password))
+            cursor.execute('INSERT INTO users (userID, username, password) VALUES (?, ?, ?)', (userID, username, password_hash))
             conn.commit()
             return {'status': 201, 'message': 'User created successfully with userID: {}'.format(userID)}
         except sqlite3.IntegrityError:
@@ -63,20 +75,21 @@ class UserDatabase:
             return {'status': 500, 'message': str(e)}
         finally:
             conn.close()
-
+            
     def login(self, username, password):
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute('SELECT userID FROM users WHERE username = ? AND password = ?', (username, password))
-        user = cursor.fetchone()
+        cursor.execute('SELECT password FROM users WHERE username = ?', (username,))
+        result = cursor.fetchone()
         conn.close()
-        
-        if user:
-            userID = user['userID']  # Get the userID from the fetched user
-            return {'status': 200, 'message': 'Login successful.', 'userId': userID}  # Include userID in the response
+
+        if result and self.verify_password(result['password'], password):
+            return {'status': 200, 'message': 'Login successful.', 'userId': self.get_user_id(username)}
         else:
             return {'status': 401, 'message': 'Invalid username or password.'}
+        
+    
         
     def get_user_id(self, username):
         conn = sqlite3.connect(self.db_path)
@@ -85,6 +98,18 @@ class UserDatabase:
         result = cursor.fetchone()
         conn.close()
         return int(result[0]) if result else None
+    
+    def hash_password(self,password):
+        ph = argon2.PasswordHasher()
+        hashed = ph.hash(password)
+        return hashed
+
+    def verify_password(self,hashed_password, input_password):
+        ph = argon2.PasswordHasher()
+        try:
+            return ph.verify(hashed_password, input_password)
+        except argon2.exceptions.VerifyMismatchError:
+            return False
 
 class FileInfoDatabase:
     def __init__(self, db_path):
