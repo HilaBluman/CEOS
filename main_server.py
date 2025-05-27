@@ -6,7 +6,7 @@ import threading
 import urllib.parse
 import fcntl
 from difflib import SequenceMatcher
-from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase
+from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase, RSAManager
 import html
 import argon2
 # Create an instance at the start of your server
@@ -16,6 +16,7 @@ file_permissions_db = FilePermissionsDatabase(DB_PATH)
 file_db = FileInfoDatabase(DB_PATH)
 change_log_db = ChangeLogDatabase(DB_PATH)
 version_log_db = VersionDatabase(DB_PATH)
+rsa_manager = RSAManager()
 
 def file_exist(file_path):
     if not os.path.exists(file_path):
@@ -538,6 +539,18 @@ def handle_client(client_socket, client_address, num_thread):
                         error_response = json.dumps({'error': str(e)})
                         response = ready_to_send("500 Internal Server Error", error_response, "application/json")
                         client_socket.send(response.encode() + error_response.encode('utf-8'))
+                
+                if "/get-public-key" in request:
+                    try:
+                        public_key_string = rsa_manager.get_public_key_string()
+                        response_data = json.dumps({"publicKey": public_key_string})
+                        response = ready_to_send("200 OK", response_data, "application/json")
+                        client_socket.send(response.encode())
+                        return
+                    except Exception as e:
+                        print(f"Error getting public key: {str(e)}")
+                        handle_500(client_socket)
+                        return
 
                 elif "imgs/" in request or request == "//":  # for windows change to // for mac //
 
@@ -555,7 +568,8 @@ def handle_client(client_socket, client_address, num_thread):
                             status = "200 OK"
                             photo = file3.read()
                         response = ready_to_send(status, photo, file_type)
-                        client_socket.send(response.encode() + photo)
+                        #client_socket.send(response.encode() + photo)
+                        client_socket.send(ready_to_send("404 not Found","no photo", "text/html"))
 
                 elif "." in request or "/" == request:  # is the last option/elif
                     request, file_type = find_file_type(request)
@@ -588,21 +602,55 @@ def handle_client(client_socket, client_address, num_thread):
                         raise ValueError("Content-Length header not found")
 
                     content_length = int(match.group(1))
-                    if "/signup" in request:
+                    if "/login" in request:
                         body = client_socket.recv(content_length).decode()
                         data = json.loads(body)
-                        username = data.get('username')
-                        password = data.get('password')
-                        response = user_db.signup(username, password)
-                        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
-
-                    elif "/login" in request:
-                        #print("headers_data: " + headers_data)
-                        body = client_socket.recv(content_length).decode()
-                        data = json.loads(body)
-                        username = data.get('username')
-                        password = data.get('password')
+                        
+                        # Check if data is encrypted
+                        if 'encrypted' in data and data['encrypted']:
+                            # Decrypt the credentials
+                            decrypted_username = rsa_manager.decrypt(data.get('username'))
+                            decrypted_password = rsa_manager.decrypt(data.get('password'))
+                            
+                            if not decrypted_username or not decrypted_password:
+                                response = {'status': 400, 'message': 'Failed to decrypt credentials'}
+                                client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+                                return
+                                
+                            username = decrypted_username
+                            password = decrypted_password
+                        else:
+                            # Handle unencrypted data (for backwards compatibility)
+                            username = data.get('username')
+                            password = data.get('password')
+                        
                         response = user_db.login(username, password)
+                        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+                    
+                    # Update signup to handle encrypted data  
+                    elif "/signup" in request:
+                        body = client_socket.recv(content_length).decode()
+                        data = json.loads(body)
+                        
+                        # Check if data is encrypted
+                        if 'encrypted' in data and data['encrypted']:
+                            # Decrypt the credentials
+                            decrypted_username = rsa_manager.decrypt(data.get('username'))
+                            decrypted_password = rsa_manager.decrypt(data.get('password'))
+                            
+                            if not decrypted_username or not decrypted_password:
+                                response = {'status': 400, 'message': 'Failed to decrypt credentials'}
+                                client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+                                return
+                                
+                            username = decrypted_username
+                            password = decrypted_password
+                        else:
+                            # Handle unencrypted data (for backwards compatibility)
+                            username = data.get('username')
+                            password = data.get('password')
+                        
+                        response = user_db.signup(username, password)
                         client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
                     
                     elif "/grant-user-to-file" in request or "/revoke-user-to-file" in request:

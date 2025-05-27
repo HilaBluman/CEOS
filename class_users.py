@@ -1,8 +1,72 @@
-import json
 import sqlite3
 import random
 import threading
 import argon2
+import base64
+import json
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+
+class RSAManager:
+    
+    def __init__(self):
+        print("Generating RSA keys in memory...")
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+            backend=default_backend()
+        )
+        self.private_key = private_key
+        self.public_key = private_key.public_key()
+        print("RSA keys ready!")
+
+    def get_public_key_string(self):
+        public_der = self.public_key.public_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        return base64.b64encode(public_der).decode('utf-8')
+    
+    def encrypt(self, message):
+        if isinstance(message, str):
+            message_bytes = message.encode('utf-8')
+        else:
+            message_bytes = message
+        encrypted = self.public_key.encrypt(
+            message_bytes,
+
+        padding.PKCS1v15()
+        )
+        return base64.b64encode(encrypted).decode('utf-8')
+    
+    def decrypt(self, encrypted_message):
+        if not encrypted_message:
+            return None
+        try:
+            encrypted_bytes = base64.b64decode(encrypted_message.encode('utf-8'))
+            
+            decrypted = self.private_key.decrypt(
+                encrypted_bytes,
+                padding.PKCS1v15()
+            )
+            return decrypted.decode('utf-8')
+        
+        except Exception as e:
+            print(f"Decryption error: {e}")
+            return None
+    
+    def decrypt_json_data(self, encrypted_data):
+        decrypted_text = self.decrypt(encrypted_data)
+        if decrypted_text:
+            try:
+                return json.loads(decrypted_text)
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error: {e}")
+                return None
+        return None
 
 class UserDatabase:
     def __init__(self, db_path):
