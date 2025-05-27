@@ -5,10 +5,21 @@ import re
 import threading
 import urllib.parse
 import fcntl
+import logging
 from difflib import SequenceMatcher
 from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase, RSAManager
-import html
-import argon2
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s',
+    handlers=[
+        logging.FileHandler('server.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # Create an instance at the start of your server
 DB_PATH = "/Users/hila/CEOs/users.db"
 user_db = UserDatabase(DB_PATH)
@@ -18,64 +29,88 @@ change_log_db = ChangeLogDatabase(DB_PATH)
 version_log_db = VersionDatabase(DB_PATH)
 rsa_manager = RSAManager()
 
+logger.info("Database connections initialized")
+
 def file_exist(file_path):
-    if not os.path.exists(file_path):
-        return False
-    return True
+    """Check if file exists at given path"""
+    exists = os.path.exists(file_path)
+    logger.debug(f"File existence check for {file_path}: {exists}")
+    return exists
 
 
-def handle_404(client_socket):  
-    with open(r"/Users/hila/CEOs/status_code/404.png", "rb") as file3:
-        photo = file3.read()
-        file_type = "png"
-        response = ready_to_send("404 Not Found", photo, file_type)
-        client_socket.send(response.encode() + photo)
+def handle_404(client_socket):
+    """Send 404 Not Found response with image"""
+    logger.info("Sending 404 Not Found response")
+    try:
+        with open(r"/Users/hila/CEOs/status_code/404.png", "rb") as file3:
+            photo = file3.read()
+            file_type = "png"
+            response = ready_to_send("404 Not Found", photo, file_type)
+            client_socket.send(response.encode() + photo)
+        logger.debug("404 response sent successfully")
+    except Exception as e:
+        logger.error(f"Error sending 404 response: {str(e)}")
 
 
 def handle_403(client_socket):
-    with open(r"/Users/hila/CEOs/status_code/403.webp", "rb") as file3:
-        photo = file3.read()
-        file_type = "webp"
-        response = ready_to_send("403 Forbidden", photo, file_type)
-        client_socket.send(response.encode() + photo)
+    """Send 403 Forbidden response with image"""
+    logger.info("Sending 403 Forbidden response")
+    try:
+        with open(r"/Users/hila/CEOs/status_code/403.webp", "rb") as file3:
+            photo = file3.read()
+            file_type = "webp"
+            response = ready_to_send("403 Forbidden", photo, file_type)
+            client_socket.send(response.encode() + photo)
+        logger.debug("403 response sent successfully")
+    except Exception as e:
+        logger.error(f"Error sending 403 response: {str(e)}")
 
 
 def handle_500(client_socket):
+    """Send 500 Internal Server Error response with image"""
+    logger.error("Sending 500 Internal Server Error response")
     try:
         with open(r"/Users/hila/CEOs/status_code/500.png", "rb") as file3:
             photo = file3.read()
             file_type = "png"
             response = ready_to_send("500 Internal Server Error", photo, file_type)
             client_socket.send(response.encode() + photo)
+        logger.debug("500 response sent successfully")
     except BrokenPipeError:
-        print("Client disconnected before response could be sent.")
+        logger.warning("Client disconnected before 500 response could be sent")
     except Exception as e:
-        print(f"An error occurred while handling 500 error: {str(e)}")
+        logger.error(f"Error handling 500 error: {str(e)}")
 
 
 def file_forbidden(file_path, forbidden):
-    if file_path in forbidden:
-        return True
-    return False
+    """Check if file path is in forbidden list"""
+    is_forbidden = file_path in forbidden
+    logger.debug(f"Forbidden check for {file_path}: {is_forbidden}")
+    return is_forbidden
+
 
 def ready_to_send(status, data_file, content_type="text/html"):
+    """Prepare HTTP response headers"""
+    logger.debug(f"Preparing response: {status}, content_type: {content_type}")
     headers = f"HTTP/1.1 {status}\r\n"
     headers += f"Content-Type: {content_type}\r\n"
     if isinstance(data_file, bytes):
-        content_length = len(data_file)  # For binary data
+        content_length = len(data_file)
     else:
-        content_length = len(data_file.encode('utf-8'))  # For string data
+        content_length = len(data_file.encode('utf-8'))
     headers += f"Content-Length: {content_length}\r\n"
     headers += f"Connection: close\r\n"
     headers += "\r\n"
     
-    return headers + str(data_file) # Combine headers and body content
+    return headers + str(data_file)
 
 
 def find_file_type(request):
-    print(request)
-    if request == "/":  # for windows change to "\\" for mac "/"
-        request = r"/home_page.html"  # will change to /home.html when there will be home screen  /code_page
+    """Determine file type and adjust request path"""
+    logger.debug(f"Finding file type for request: {request}")
+    
+    if request == "/":
+        request = r"/home_page.html"
         file_type = "text/html"
     elif r".html" in request:
         file_type = "text/html"
@@ -86,13 +121,16 @@ def find_file_type(request):
         file_type = "image/" + request[index_dot:index_dot + 3]
     else:
         index_dot = request.find(".") + 1
-        file_type = "text/" + request[index_dot:index_dot + 3] 
-    print(file_type)
+        file_type = "text/" + request[index_dot:index_dot + 3]
+    
+    logger.debug(f"Determined file type: {file_type} for request: {request}")
     return request, file_type
 
 
 def get_content_of_upload(client_socket, content_length):
-    # Receive and write file data
+    """Receive file upload content from client"""
+    logger.info(f"Receiving upload content, expected length: {content_length}")
+    
     bytes_received = 0
     content = b""
     try:
@@ -105,64 +143,95 @@ def get_content_of_upload(client_socket, content_length):
             bytes_received += len(data)
 
         if bytes_received == content_length:
-            msg = "File received successfully."
-            print(msg)
-            return content.decode()  # Decode the bytes to string before returning
+            logger.info("File received successfully")
+            return content.decode()
         else:
-            msg = f"File upload incomplete. Received {bytes_received} of {content_length} bytes."
-            print(msg)
+            logger.warning(f"File upload incomplete. Received {bytes_received} of {content_length} bytes")
             return None
     except (BrokenPipeError, ConnectionResetError) as e:
-        print(f"Connection error during file upload: {str(e)}")
+        logger.error(f"Connection error during file upload: {str(e)}")
         return None
 
 
 def receive_headers(client_socket):
-    # Receiveing only the headers
+    """Receive and parse HTTP headers from client"""
+    logger.debug("Receiving headers from client")
+    
     headers = b""
-    client_socket.settimeout(300) 
-    action = client_socket.recv(4).decode() # can get less than 4
+    client_socket.settimeout(300)
+    action = client_socket.recv(4).decode()
     client_socket.settimeout(90)
+    
     if not action:
-        #print("client disconnected")
+        logger.info("Client disconnected")
         return f"client disconnected", ""
+    
     if action == "DELE":
-        action =  action + client_socket.recv(2).decode()
-    if action != "GET " and action != "POST" and action != "DELETE" :
-
-        #print(f"Not valid action: '{action}'")
+        action = action + client_socket.recv(2).decode()
+    
+    if action not in ["GET ", "POST", "DELETE"]:
+        logger.warning(f"Invalid HTTP action received: '{action}'")
         return f"Not valid action", ""
+    
     try:
         while True:
-            chunk = client_socket.recv(1)  # gets every time one so not exstra data gets lost.
+            chunk = client_socket.recv(1)
             headers += chunk
             if b"\r\n\r\n" in headers:
                 break
     except socket.timeout:
+        logger.error("Timeout while receiving headers")
         raise Exception("Timeout while receiving headers")
     finally:
         client_socket.settimeout(None)
+    
+    logger.debug(f"Headers received successfully, action: {action}")
     return action, headers.decode()
 
-def new_file(client_socket, PATH_TO_FOLDER, headers_data, value = ""):
-    user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)')
+
+def get_header(client_socket, headers_data, header_pattern=r'filename:\s*(\S+)', header_name="header"):
+    """Extract specific header value using regex with better error handling"""
+    logger.debug(f"Looking for header: {header_name} with pattern: {header_pattern}")
+    logger.debug(f"Headers data preview: {headers_data[:200]}...")
+    
+    header_match = re.search(header_pattern, headers_data)
+    if not header_match:
+        logger.error(f"Header '{header_name}' not found in request")
+        logger.debug(f"All headers received:\n{headers_data}")
+        error_msg = f"Header '{header_name}' not found"
+        client_socket.send(ready_to_send("406 Not Acceptable", error_msg, "text/plain").encode())
+        return None
+    
+    value = header_match.group(1)
+    logger.debug(f"Header '{header_name}' extracted: {value}")
+    return value
+
+
+def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
+    """Create a new file for a user"""
+    logger.info("Creating new file")
+    
+    user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)', "userId")
     if not user_id:
+        logger.error("User ID not found in headers")
         return
-    filename = get_header(client_socket, headers_data, r'filename:\s*(\S+)')
+    
+    filename = get_header(client_socket, headers_data, r'filename:\s*(\S+)', "filename")
     if not filename:
+        logger.error("Filename not found in headers")
         return
+    
+    logger.info(f"Creating file '{filename}' for user {user_id}")
     
     # Check if filename already exists for this user
     existing_file = file_db.check_file_exists(user_id, filename)
     if existing_file:
-        # File already exists, send error response
+        logger.warning(f"File '{filename}' already exists for user {user_id}")
         data = json.dumps({
             "error": "File already exists",
             "fileId": 0
         })
-        print("File already exists")
         response = ready_to_send("200", data, "application/json")
-        
     else:
         # Create new file
         result = file_db.add_file(filename, user_id)
@@ -171,80 +240,63 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value = ""):
             lines = [""]
             if value:
                 lines = value.split("/n")
-            with open(PATH_TO_FOLDER + "/uploads/"+ filename, 'w') as file:
-                file.writelines(lines)  # Create file
-            print(f"File {filename} created in path.")
-            # Get the file ID of the newly created file
+            
+            file_path = PATH_TO_FOLDER + "/uploads/" + filename
+            with open(file_path, 'w') as file:
+                file.writelines(lines)
+            
+            logger.info(f"File '{filename}' created at path: {file_path}")
+            
+            # Get the file ID and grant owner access
             file_id = file_db.check_file_exists(user_id, filename)
-            print("fileID: " + str(file_id))
-            result = file_permissions_db.grant_access(file_id, user_id,"owner") # got 500 stutus every time
-            print("after grant_access to owner, result: " + str(result["status"]) + " " +result["message"] )
+            logger.debug(f"File ID: {file_id}")
+            
+            result = file_permissions_db.grant_access(file_id, user_id, "owner")
+            logger.info(f"Owner access granted, result: {result['status']} - {result['message']}")
 
             data = json.dumps({
                 "success": "File created successfully",
                 "fileId": file_id
             })
-            # Send success response
-            print("File created successfully")
             response = ready_to_send(result['status'], data, "application/json")
         else:
-            # Send error response
-            print("error: " + result['message'])
+            logger.error(f"File creation failed: {result['message']}")
             response = ready_to_send(result['status'], result['message'], "application/json")
-        client_socket.send(response.encode())
-
-
-def get_header(client_socket, headers_data, header=r'filename:\s*(\S+)'):
-    header_match = re.search(header, headers_data)
-    if not header_match:
-        client_socket.send(ready_to_send("406 Not Acceptable", f" header not found", "text/plain").encode())
-        return None
-    return header_match.group(1)
-
-def get_filename(client_socket, headers_data):
-    filename_match = re.search(r'filename:\s*(\S+)', headers_data)
-    if not filename_match:
-        client_socket.send(ready_to_send("406 Not Acceptable", f" no filename", "text/plain").encode())
-        return "no filename"
-    return filename_match.group(1)
-
-
-def get_countent_len(client_socket, headers_data):
-    match = re.search(r'file-length:\s*(\S+)', headers_data)
-    if not match:
-        client_socket.send(ready_to_send("406 Not Acceptable", f" no file-length", "text/plain").encode())
-        return "no file"
-    return match.group(1)
+    
+    client_socket.send(response.encode())
 
 
 def modify_file(row, action, content, file_path, linesLength):
+    """Modify file content based on action type"""
+    logger.info(f"Modifying file: {file_path}, action: {action}, row: {row}")
+    
     try:
         with open(file_path, 'r+', encoding='utf-8', newline=None) as file:
-            # Lock the file for writing
             fcntl.flock(file, fcntl.LOCK_EX)
+            lines = file.readlines()
 
-            lines = file.readlines()  # Read all lines into a list
-
-            # Checking if an empty line has been deleted
+            # Handle special cases
             if action == 'delete same line' or action == "Z update":
-                print("lineslength: " + str(len(lines)))
+                logger.debug(f"Lines length: {len(lines)}")
                 if len(lines) > linesLength:
-                    print('update and delete ')
+                    logger.debug('Update and delete action detected')
                     action = 'update and delete row below'
                 else:
                     action = 'update'
 
-                
+            # Perform the action
             if action == "delete highlighted":
-                for i in range(content - 1,row - 1, -1):  # content is used as the end of the delete
+                for i in range(content - 1, row - 1, -1):
                     del lines[i]
+                logger.debug(f"Deleted highlighted lines from {row} to {content}")
 
             elif action == 'saveAll':
                 lines.clear()
                 lines = content
+                logger.debug("Saved all content")
 
             elif action == 'delete':
-                print(f"Attempting to delete row: {row} from {len(lines)} ")
+                logger.debug(f"Attempting to delete row: {row} from {len(lines)} lines")
                 if 0 <= row < len(lines):
                     del lines[row]
                 else:
@@ -253,554 +305,744 @@ def modify_file(row, action, content, file_path, linesLength):
             elif action == "insert" or action == "paste":
                 if action == "paste":
                     content = content.replace('\\"', '"')
-                print(f"Attempting to insert: {row}")
+                logger.debug(f"Inserting at row: {row}")
                 if row >= len(lines):
-                    print(f"at end of file: {row}")
-                    lines.insert(row, content )
+                    lines.insert(row, content)
                 else:
-                    print("enter in mid of line ")
                     lines.insert(row, content + "\r")
 
             elif action == 'update':
                 if row == len(lines):
                     lines.insert(row, content)
                 elif 0 <= row < len(lines):
-                    print(f"Attempting to update line : {row}")
+                    logger.debug(f"Updating line: {row}")
                     lines[row] = content + "\r"
                 else:
                     raise ValueError("Row number is out of bounds.")
-                
+
             elif action == "update and delete row below":
-                    print("in update and delete row below")
-                    del lines[row + 1]
-                    lines[row] = content + "\r"
+                logger.debug("Update and delete row below")
+                del lines[row + 1]
+                lines[row] = content + "\r"
             else:
                 raise ValueError("Invalid action.")
 
-            # Move the file pointer to the beginning of the file
+            # Write changes back to file
             file.seek(0)
-            file.truncate()  # Clear the file before writing new content
+            file.truncate()
             file.writelines(lines)
-            print("was written in file")
+            logger.info("File modification completed successfully")
             return action
 
-
     except FileNotFoundError as e:
-        print(e)
+        logger.error(f"File not found: {file_path}")
         raise FileNotFoundError(f"The file at {file_path} was not found.")
     except Exception as e:
-        print(e)
+        logger.error(f"Error modifying file: {str(e)}")
         raise ValueError(f"An error occurred: {e}")
+
+
+def show_version(file_id, user_id, version, client_socket):
+    """Show a specific version of a file"""
+    logger.info(f"Showing version {version} of file {file_id} for user {user_id}")
     
-def show_version(file_id,user_id,version,client_socket):
     if not file_id or not user_id or not version:
+        logger.error("Missing required parameters: file_id, user_id, or version")
         raise ValueError("File ID, User ID or Version not provided")
     elif not file_permissions_db.is_editor_or_owner(file_id, user_id):
-        raise ValueError("User does not have promison to see versions")
-    fullcontent = version_log_db.get_version_fullcontent(version,file_id)
-    print("fullcontent: " + fullcontent[0])
+        logger.warning(f"User {user_id} does not have permission to see versions of file {file_id}")
+        raise ValueError("User does not have permission to see versions")
+    
+    fullcontent = version_log_db.get_version_fullcontent(version, file_id)
+    
     if fullcontent is None:
+        logger.warning(f"Version {version} not found for file {file_id}")
         response = ready_to_send("404 Not Found", json.dumps({"error": "Version or content not found"}), "application/json")
     else:
+        logger.debug(f"Version content retrieved: {fullcontent[0][:100]}...")
         response = ready_to_send("200 OK", json.dumps({"fullContent": fullcontent[0]}), "application/json")
+    
     client_socket.send(response.encode())
 
+
 def save_modification(client_socket, file_id, file_name, file_path, match1, user_id):
+    """Save file modifications"""
+    logger.info(f"Saving modification for file {file_id} by user {user_id}")
+    
     if not os.path.exists(file_path):
+        logger.error(f"File path does not exist: {file_path}")
         if file_name == "File not found":
-            print(f"File {file_id} does not exist in the database or path.")
-            client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
+            client_socket.send(ready_to_send("200 OK", "File does not exist in database", "text/plain").encode())
         else:
-            print(f"File {file_id} does not exist in the path.")
-            client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
+            client_socket.send(ready_to_send("200 OK", "File does not exist in path", "text/plain").encode())
     elif file_name == "File not found":
-        print(f"File {file_id} does not exist in the database.")
-        client_socket.send(ready_to_send("200 OK", "File does not exist", "text/plain").encode())
+        logger.error(f"File {file_id} not found in database")
+        client_socket.send(ready_to_send("200 OK", "File does not exist in database", "text/plain").encode())
     else:
-        modification_data = urllib.parse.unquote(match1.group(1)) 
+        modification_data = urllib.parse.unquote(match1.group(1))
         try:
             modification = json.loads(modification_data)
-            print("modification:", modification)
-            print("modification['content']:", modification['content'])
+            logger.debug(f"Modification data: {modification}")
 
-            content = modification['content'] 
-                
+            content = modification['content']
+            
             try:
-                print(f"trying: {modification['row']}, {modification['action']}, {content}, {file_path} ")
-                modification['action'] = modify_file(modification['row'], modification['action'], content, file_path, modification['linesLength'])
+                modification['action'] = modify_file(
+                    modification['row'], 
+                    modification['action'], 
+                    content, 
+                    file_path, 
+                    modification['linesLength']
+                )
                 msg = "File modified successfully."
                 if modification['action'] in ["paste", "update delete row below"]:
                     content = content + "\n"
-                change_log_db.add_modification(file_id, modification, user_id)  
+                change_log_db.add_modification(file_id, modification, user_id)
+                logger.info("Modification saved successfully")
             except Exception as e:
                 msg = f"Error modifying file: {str(e)}"
-            print(msg)
+                logger.error(msg)
+            
             client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
         except json.JSONDecodeError as e:
-            print(f"JSON decode error: {e}")
+            logger.error(f"JSON decode error: {e}")
+
+
+# GET request handlers
+def handle_poll_updates(client_socket, headers_data):
+    """Handle polling for file updates"""
+    logger.debug("Handling poll updates")
+    try:
+        fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
+        lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)', "lastModID")
+        userID = get_header(client_socket, headers_data, r'userID:\s*(\d+)', "userID")
+        
+        if not fileID or not lastModID or not userID:
+            return
+        
+        updates = change_log_db.get_changes_for_user(fileID, lastModID, userID)
+        if updates:
+            response = ready_to_send(200, json.dumps(updates), content_type="application/json")
+        else:
+            response = ready_to_send(200, json.dumps("No updates"), content_type="application/json")
+        
+        client_socket.send(response.encode())
+        
+    except BrokenPipeError:
+        logger.warning("Client disconnected before poll-updates response could be sent")
+    except Exception as e:
+        logger.error(f"Error in poll-updates: {str(e)}")
+        handle_500(client_socket)
+
+
+def handle_save_request(client_socket, headers_data, request, PATH_TO_FOLDER):
+    """Handle file save requests"""
+    logger.info("Handling save request")
+    
+    decoded_request = urllib.parse.unquote(request)
+    match1 = re.search(r'/save\?modification=([^&]+)', decoded_request)
+    if not match1:
+        logger.error("Modification header not found in save request")
+        raise ValueError("modification header not found")
+    
+    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
+    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)', "userID")
+    
+    if not file_id or not user_id:
+        return
+    
+    file_name = file_db.get_filename_by_id(file_id)['filename']
+    file_path = PATH_TO_FOLDER + "/uploads/" + file_name
+    
+    save_modification(client_socket, file_id, file_name, file_path, match1, user_id)
+
+
+def handle_file_details(client_socket, headers_data):
+    """Handle get file details requests"""
+    logger.info("Handling file details request")
+    
+    try:
+        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
+        if not file_id:
+            return
+
+        file_details = file_db.get_file_details(file_id)
+        if not file_details:
+            response = ready_to_send("404 Not Found", json.dumps({"error": "File not found"}), "application/json")
+            client_socket.send(response.encode())
+            return
+
+        users_with_access = file_permissions_db.get_users_with_access(file_id)
+        response_data = {
+            "filename": file_details['filename'],
+            "users": users_with_access,
+            "owner_id": file_details['owner_id']
+        }
+        response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
+        client_socket.send(response.encode())
+        
+    except Exception as e:
+        logger.error(f"Error in get-file-details: {str(e)}")
+        error_response = json.dumps({"error": str(e)})
+        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+        client_socket.send(response.encode())
+
+
+def handle_user_files(client_socket, headers_data):
+    """Handle get user files requests"""
+    logger.info("Handling user files request")
+    
+    try:
+
+        user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)', "userId")
+        if user_id:
+            logger.info(f"Found user ID using pattern userId: {user_id}")
+                
+        decrypted_user_id = rsa_manager.decrypt(user_id)
+
+        if not decrypted_user_id:
+            logger.error("No valid userId header found")
+            return
+        
+        decrypted_user_id = int(decrypted_user_id)
+        logger.info(f"Getting files for user ID: {decrypted_user_id}")
+        
+        user_files = file_permissions_db.get_user_access_files(decrypted_user_id)
+        file_ids = [file['fileID'] for file in user_files]
+        file_names = [file['filename'] for file in user_files]
+        
+        logger.info(f"Found {len(file_ids)} files for user {decrypted_user_id}")
+        
+        response_data = json.dumps({
+            'filesId': file_ids,
+            'filenames': file_names
+        })
+        
+        response = ready_to_send("200 OK", response_data, "application/json")
+        client_socket.send(response.encode())
+        
+    except Exception as e:
+        logger.error(f"Error getting user files: {str(e)}")
+        error_response = json.dumps({'error': str(e)})
+        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+        client_socket.send(response.encode())
+
+
+def handle_version_details(client_socket, headers_data):
+    """Handle get version details requests"""
+    logger.info("Handling version details request")
+    
+    try:
+        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
+        if not file_id:
+            return
+        
+        versions = version_log_db.get_versions_by_fileID(file_id)
+        response_data = json.dumps({
+            'versions': versions,
+            'owner_id': file_db.get_owner_id(file_id)
+        })
+        response = ready_to_send("200 OK", response_data, "application/json")
+        client_socket.send(response.encode())
+        
+    except Exception as e:
+        logger.error(f"Error in get-version-details: {str(e)}")
+        error_response = json.dumps({"error": str(e)})
+        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+        client_socket.send(response.encode())
+
+
+def handle_show_version(client_socket, headers_data):
+    """Handle show version requests"""
+    logger.info("Handling show version request")
+    
+    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
+    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)', "userID")
+    version = get_header(client_socket, headers_data, r'version:\s*(\d+)', "version")
+    
+    if not file_id or not user_id or not version:
+        return
+    
+    show_version(file_id, user_id, version, client_socket)
+
+
+def handle_viewer_status(client_socket, headers_data):
+    """Handle check viewer status requests"""
+    logger.info("Handling viewer status check")
+    
+    file_id = get_header(client_socket, headers_data, r'fileId:\s*(\d+)', "fileId")
+    user_id = get_header(client_socket, headers_data, r'userId:\s*(\d+)', "userId")
+    
+    if not file_id or not user_id:
+        return
+    
+    is_editor_or_owner = file_permissions_db.is_editor_or_owner(file_id, user_id)
+    response = ready_to_send("200 OK", json.dumps({"isViewer": not is_editor_or_owner}), "application/json")
+    client_socket.send(response.encode())
+
+
+def handle_new_file_request(client_socket, headers_data, PATH_TO_FOLDER):
+    """Handle new file creation requests"""
+    logger.info("Handling new file request")
+    
+    new_file(client_socket, PATH_TO_FOLDER, headers_data)
+
+
+def handle_load_file(client_socket, headers_data, PATH_TO_FOLDER):
+    """Handle file loading requests"""
+    logger.info("Handling load file request")
+    
+    try:
+        fileId = get_header(client_socket, headers_data, r'fileId:\s*(\S+)', "fileId")
+        if not fileId:
+            return
+        
+        file_status_and_name = file_db.get_filename_by_id(fileId)
+        filename = file_status_and_name['filename']
+        status = file_status_and_name['status']
+        
+        if status == 404:
+            logger.warning(f"File not found: {filename}")
+            response = ready_to_send("404 Not Found", filename, "application/json")
+            client_socket.send(response.encode())
+        else:
+            file_path = f"{PATH_TO_FOLDER}/uploads/{filename}"
+            logger.info(f"Loading file ID: {fileId}, name: {filename}")
+            
+            if not os.path.exists(file_path):
+                content = ''
+            else:
+                with open(file_path, 'r') as file:
+                    content = file.read()
+
+            lastModID = change_log_db.get_last_mod_id(fileId)
+            response_data = {
+                'lastModID': lastModID,
+                'fullContent': content
+            }
+            response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
+            client_socket.send(response.encode())
+            logger.info("File loaded successfully")
+
+    except Exception as e:
+        logger.error(f"Error in load handler: {str(e)}")
+        error_response = json.dumps({'error': str(e)})
+        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+        client_socket.send(response.encode())
+
+
+def handle_public_key(client_socket):
+    """Handle public key requests"""
+    logger.info("Handling public key request")
+    
+    try:
+        public_key_string = rsa_manager.get_public_key_string()
+        response_data = json.dumps({"publicKey": public_key_string})
+        response = ready_to_send("200 OK", response_data, "application/json")
+        client_socket.send(response.encode())
+        
+    except Exception as e:
+        logger.error(f"Error getting public key: {str(e)}")
+        handle_500(client_socket)
+
+
+def handle_static_files(client_socket, request, PATH_TO_FOLDER, FORBIDDEN):
+    """Handle static file requests (images, HTML, etc.)"""
+    logger.debug(f"Handling static file request: {request}")
+    
+    if file_forbidden(PATH_TO_FOLDER + request, FORBIDDEN):
+        logger.warning(f"Forbidden file access attempt: {request}")
+        handle_403(client_socket)
+    elif not file_exist(PATH_TO_FOLDER + request):
+        logger.warning(f"File not found: {request}")
+        handle_404(client_socket)
+    else:
+        request, file_type = find_file_type(request)
+        logger.info(f"Serving file: {request}")
+
+        if "imgs/" in request:
+            with open(PATH_TO_FOLDER + request, "rb") as file3:
+                photo = file3.read()
+            response = ready_to_send("200 OK", photo, file_type)
+            client_socket.send(response.encode() + photo)
+        else:
+            with open(PATH_TO_FOLDER + request, "r") as file2:
+                code = file2.read()
+                response = ready_to_send("200 OK", code, file_type)
+                client_socket.send(response.encode())
+
+
+def handle_get_requests(client_socket, request, headers_data, PATH_TO_FOLDER, FORBIDDEN):
+    """Handle all GET requests"""
+    logger.debug(f"Processing GET request: {request}")
+    
+    if "/poll-updates" in request:
+        handle_poll_updates(client_socket, headers_data)
+    elif "/save" in request:
+        handle_save_request(client_socket, headers_data, request, PATH_TO_FOLDER)
+    elif "/get-file-details" in request:
+        handle_file_details(client_socket, headers_data)
+    elif "/get-user-files" in request:
+        handle_user_files(client_socket, headers_data)
+    elif "/get-version-details" in request:
+        handle_version_details(client_socket, headers_data)
+    elif "/show-version" in request:
+        handle_show_version(client_socket, headers_data)
+    elif "/check-viewer-status" in request:
+        handle_viewer_status(client_socket, headers_data)
+    elif "/new-file" in request:
+        handle_new_file_request(client_socket, headers_data, PATH_TO_FOLDER)
+    elif "/load" in request:
+        handle_load_file(client_socket, headers_data, PATH_TO_FOLDER)
+    elif "/get-public-key" in request:
+        handle_public_key(client_socket)
+    elif "imgs/" in request or request == "//" or "." in request or "/" == request:
+        handle_static_files(client_socket, request, PATH_TO_FOLDER, FORBIDDEN)
+    else:
+        logger.warning(f"Unknown GET request: {request}")
+        handle_500(client_socket)
+
+
+# POST request handlers
+def handle_login(client_socket, content_length):
+    """Handle login requests"""
+    logger.info("Handling login request")
+    
+    body = client_socket.recv(content_length).decode()
+    data = json.loads(body)
+    
+    # Check if data is encrypted
+    if 'encrypted' in data and data['encrypted']:
+        logger.debug("Processing encrypted login credentials")
+        decrypted_username = rsa_manager.decrypt(data.get('username'))
+        decrypted_password = rsa_manager.decrypt(data.get('password'))
+        
+        if not decrypted_username or not decrypted_password:
+            logger.error("Failed to decrypt login credentials")
+            response = {'status': 400, 'message': 'Failed to decrypt credentials'}
+            client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+            return
+            
+        username = decrypted_username
+        password = decrypted_password
+    else:
+        logger.debug("Processing unencrypted login credentials")
+        username = data.get('username')
+        password = data.get('password')
+    
+    logger.info(f"Login attempt for username: {username}")
+    response = user_db.login(username, password)
+    
+    if response['status'] == 200:
+        logger.info(f"Login successful for: {username}")
+    else:
+        logger.warning(f"Login failed for: {username}")
+    
+    client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+
+
+def handle_signup(client_socket, content_length):
+    """Handle signup requests"""
+    logger.info("Handling signup request")
+    
+    body = client_socket.recv(content_length).decode()
+    data = json.loads(body)
+    
+    # Check if data is encrypted
+    if 'encrypted' in data and data['encrypted']:
+        logger.debug("Processing encrypted signup credentials")
+        decrypted_username = rsa_manager.decrypt(data.get('username'))
+        decrypted_password = rsa_manager.decrypt(data.get('password'))
+        
+        if not decrypted_username or not decrypted_password:
+            logger.error("Failed to decrypt signup credentials")
+            response = {'status': 400, 'message': 'Failed to decrypt credentials'}
+            client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+            return
+            
+        username = decrypted_username
+        password = decrypted_password
+    else:
+        logger.debug("Processing unencrypted signup credentials")
+        username = data.get('username')
+        password = data.get('password')
+    
+    logger.info(f"Signup attempt for username: {username}")
+    response = user_db.signup(username, password)
+    
+    if response['status'] == 201:
+        logger.info(f"User registration successful: {username}")
+    else:
+        logger.warning(f"User registration failed: {username}")
+    
+    client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+
+
+def handle_user_permissions(client_socket, content_length, headers_data, request):
+    """Handle grant/revoke user permissions requests"""
+    logger.info(f"Handling user permissions request: {request}")
+    
+    body = client_socket.recv(content_length).decode()
+    data = json.loads(body)
+    username = data.get('username')
+    userID = user_db.get_user_id(username)
+    fileID = data.get('fileID')
+    role = data.get('role')
+    ownerID = get_header(client_socket, headers_data, r'ownerID:\s*(\d+)', "ownerID")
+
+    if not userID:
+        logger.error(f"User not found: {username}")
+        client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not a user!!"), "application/json").encode())
+    elif not ownerID or not file_db.is_owner(int(fileID), int(ownerID)):
+        logger.error(f"Permission denied: User {ownerID} is not owner of file {fileID}")
+        client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
+    else:
+        if "/revoke-user-to-file" in request:
+            logger.info(f"Revoking access for user {userID} from file {fileID}")
+            response = file_permissions_db.revoke_access(fileID, userID)
+        elif "/grant-user-to-file" in request:
+            logger.info(f"Granting {role} access for user {userID} to file {fileID}")
+            response = file_permissions_db.grant_access(fileID, userID, role)
+        
+        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+
+
+def handle_save_version(client_socket, content_length):
+    """Handle save new version requests"""
+    logger.info("Handling save new version request")
+    
+    body = client_socket.recv(content_length).decode()
+    data = json.loads(body)
+    fileID = data.get('fileID')
+    userID = data.get('userID')
+    content = data.get('content')
+    
+    logger.info(f"Saving new version for file {fileID} by user {userID}")
+    response = version_log_db.add_version(int(fileID), content)
+    client_socket.send(ready_to_send(response['status'], json.dumps(response['message']), "application/json").encode())
+
+
+def handle_upload_file(client_socket, content_length, headers_data, PATH_TO_FOLDER):
+    """Handle file upload requests"""
+    logger.info("Handling file upload request")
+    
+    content = get_content_of_upload(client_socket, content_length)
+    if content:
+        new_file(client_socket, PATH_TO_FOLDER, headers_data, content)
+    else:
+        logger.error("No content received for file upload")
+        client_socket.send(ready_to_send("400 Bad Request", "Broken pipe or No content").encode())
+
+
+def handle_post_requests(client_socket, request, headers_data, PATH_TO_FOLDER):
+    """Handle all POST requests"""
+    logger.debug(f"Processing POST request: {request}")
+    
+    try:
+        match = re.search(r'Content-Length: (\d+)', headers_data)
+        if not match:
+            logger.error("Content-Length header not found")
+            raise ValueError("Content-Length header not found")
+
+        content_length = int(match.group(1))
+        logger.debug(f"Content length: {content_length}")
+        
+        if "/login" in request:
+            handle_login(client_socket, content_length)
+        elif "/signup" in request:
+            handle_signup(client_socket, content_length)
+        elif "/grant-user-to-file" in request or "/revoke-user-to-file" in request:
+            handle_user_permissions(client_socket, content_length, headers_data, request)
+        elif "/save-new-version" in request:
+            handle_save_version(client_socket, content_length)
+        elif "/disconnection" in request:
+            logger.info("Client disconnection request")
+            if content_length > 0:
+                client_socket.recv(content_length).decode()
+            return
+        elif "/upload-file" in request:
+            handle_upload_file(client_socket, content_length, headers_data, PATH_TO_FOLDER)
+        else:
+            logger.warning(f"Unknown POST request: {request}")
+            handle_500(client_socket)
+
+    except Exception as e:
+        logger.error(f"Error processing POST request: {str(e)}")
+        handle_500(client_socket)
+
+
+# DELETE request handlers
+def handle_delete_version(client_socket, headers_data):
+    """Handle delete version requests"""
+    logger.info("Handling delete version request")
+    
+    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
+    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)', "userID")
+    version = get_header(client_socket, headers_data, r'version:\s*(\d+)', "version")
+
+    if not file_id or not user_id or not version:
+        logger.error("Missing parameters for delete version request")
+        return
+    
+    if not file_db.is_owner(int(file_id), int(user_id)):
+        logger.error(f"User {user_id} is not owner of file {file_id}")
+        client_socket.send(ready_to_send("500 Internal Server Error", "Not owner!!", "text/plain").encode())
+    else:
+        logger.info(f"Deleting version {version} of file {file_id}")
+        result = version_log_db.delete_version(version, file_id)
+        client_socket.send(ready_to_send(result['status'], result["message"], "text/plain").encode())
+
+
+def handle_delete_file(client_socket, headers_data, PATH_TO_FOLDER):
+    """Handle delete file requests"""
+    logger.info("Handling delete file request")
+    
+    try:
+        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
+        user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)', "userID")
+        
+        if not file_id or not user_id:
+            return
+        
+        if not file_db.is_owner(int(file_id), int(user_id)):
+            logger.error(f"User {user_id} is not owner of file {file_id}")
+            client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
+            return
+
+        logger.info(f"Deleting file {file_id}")
+        file_result = file_db.delete_file(file_id)
+
+        if file_result['status'] != 200:
+            response = ready_to_send(str(file_result['status']), json.dumps({"error": file_result['message']}), "application/json")
+            client_socket.send(response.encode())
+            return
+
+        permissions_result = file_permissions_db.delete_file_permissions(file_id)
+        if permissions_result['status'] != 200:
+            response = ready_to_send(str(permissions_result['status']), json.dumps({"error": permissions_result['message']}), "application/json")
+            client_socket.send(response.encode())
+            return
+
+        # Delete file from filesystem
+        try:
+            file_path = os.path.join(PATH_TO_FOLDER, "uploads", file_result['filename'])
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logger.info(f"File deleted from filesystem: {file_path}")
+        except Exception as e:
+            logger.error(f"Error deleting file from filesystem: {str(e)}")
+
+        response = ready_to_send("200 OK", json.dumps({"message": "File deleted successfully"}), "application/json")
+        client_socket.send(response.encode())
+        
+    except Exception as e:
+        logger.error(f"Error in delete-file: {str(e)}")
+        error_response = json.dumps({"error": str(e)})
+        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+        client_socket.send(response.encode())
+
+
+def handle_delete_requests(client_socket, request, headers_data, PATH_TO_FOLDER):
+    """Handle all DELETE requests"""
+    logger.debug(f"Processing DELETE request: {request}")
+    
+    if "/delete-version" in request:
+        handle_delete_version(client_socket, headers_data)
+    elif "/delete-file" in request:
+        handle_delete_file(client_socket, headers_data, PATH_TO_FOLDER)
+    else:
+        logger.warning(f"Unknown DELETE request: {request}")
+        handle_500(client_socket)
+
 
 def handle_client(client_socket, client_address, num_thread):
-    PATH_TO_FOLDER = r"/Users/hila/CEOs"  # for windows change to C:\webroot\ for mac /Users/hila/webroot
+    """Main client handler - now modularized into smaller functions"""
+    PATH_TO_FOLDER = r"/Users/hila/CEOs"
     FORBIDDEN = {f"{PATH_TO_FOLDER}/status_code/404.png", f"{PATH_TO_FOLDER}/status_code/life.txt",
                  f"{PATH_TO_FOLDER}/status_code/500.png"}
+
+    client_ip = client_address[0]
+    client_port = client_address[1]
+    logger.info(f"New client connection from {client_ip}:{client_port} (Thread #{num_thread})")
 
     try:
         try:
             action, headers_data = receive_headers(client_socket)
+            
             if action == "client disconnected":
-                print(action)
+                logger.info(f"Client {client_ip} disconnected gracefully")
                 client_socket.close()
-                return  # Exit the function
+                return
 
             if action == "Not valid action":
-                print(action)
-                return  # Exit the function
+                logger.warning(f"Invalid HTTP method from {client_ip}")
+                return
 
             end = headers_data.find(r"HTTP") - 1
             request = headers_data[:end]
 
-            if not "/poll-updates" in request:
-                    print("_________________________")
-                    #print(f"Client {client_address} wants to: '{action}'")
+            # Log non-polling requests with cleaner format
+            if "/poll-updates" not in request:
+                method = action.strip()
+                logger.info(f"{client_ip} → {method} {request}")
 
+            # Route requests to appropriate handlers
             if action == "GET ":
-
-                if "/poll-updates" in request:
-                    try:
-                        fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
-                        lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)')
-                        userID = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
-                        # Check for updates
-                        updates = change_log_db.get_changes_for_user(fileID,lastModID, userID)
-                        if updates:
-                            response = ready_to_send(200, json.dumps(updates), content_type="application/json")
-                        else: 
-                            response = ready_to_send(200, json.dumps("No updates"), content_type="application/json")
-                        try:
-                            client_socket.send(response.encode())
-                        except BrokenPipeError:
-                            print("Client disconnected before response could be sent")
-                            return
-                        
-                    except Exception as e:
-                        print(f"Error in poll-updates: {str(e)}")
-                        try:
-                            handle_500(client_socket)
-                        except BrokenPipeError:
-                            print("Client disconnected during error handling")
-                            return
-
-                elif "/save" in request:
-                    print("in save")
-                    #check if file exist in path and if he is in the db - not exist but in db create one.
-                    decoded_request = urllib.parse.unquote(request)
-                    match1 = re.search(r'/save\?modification=([^&]+)', decoded_request)
-                    if not match1:
-                        print("modification header not found")
-                        raise ValueError("modification header not found")
-                    
-                    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
-                    file_name = file_db.get_filename_by_id(file_id)['filename']
-                    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
-                    file_path = PATH_TO_FOLDER + "/uploads/" + file_name
-                    save_modification(client_socket, file_id, file_name, file_path, match1, user_id)
-                    
-                        
-                elif "/get-file-details" in request:
-                    try:
-                        print("in /get-file-details")
-                        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
-                        if not file_id:
-                            raise ValueError("File ID not provided")
-
-                        file_details = file_db.get_file_details(file_id)
-                        if not file_details:
-                            response = ready_to_send("404 Not Found", json.dumps({"error": "File not found"}), "application/json")
-                            client_socket.send(response.encode())
-                            return
-
-                        users_with_access = file_permissions_db.get_users_with_access(file_id)
-                        response_data = {
-                            "filename": file_details['filename'],
-                            "users": users_with_access,
-                            "owner_id": file_details['owner_id']
-                        }
-                        response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
-                        client_socket.send(response.encode())
-                    except Exception as e:
-                        print(f"Error in get-file-details: {str(e)}")
-                        error_response = json.dumps({"error": str(e)})
-                        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
-                        client_socket.send(response.encode())
-
-                elif "/get-user-files" in request:
-                    try:
-                        print("Getting user files")
-                        user_id = get_header(client_socket, headers_data, r'userId:\s*(\d+)')
-                        if user_id is None:
-                            return
-                        user_id = int(user_id) 
-                        user_files = file_permissions_db.get_user_access_files(user_id)
-                        file_ids = [file['fileID'] for file in user_files]
-                        file_names = [file['filename'] for file in user_files]
-                        response_data = json.dumps({
-                            'filesId': file_ids,
-                            'filenames': file_names
-                        })
-                        
-                        response = ready_to_send("200 OK", response_data, "application/json")
-                        client_socket.send(response.encode())
-                    except Exception as e:
-                        print(f"Error getting user files: {str(e)}")
-                        error_response = json.dumps({'error': str(e)})
-                        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
-                        client_socket.send(response.encode())
-                
-                elif "/get-version-details" in request:
-                    try:
-                        print("in /get-version-details")
-                        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
-                        if not file_id:
-                            raise ValueError("File ID not provided")
-                        versions = version_log_db.get_versions_by_fileID(file_id)
-                        response_data = json.dumps({
-                            'versions': versions,
-                            'owner_id': file_db.get_owner_id(file_id)
-                        })
-                        response = ready_to_send("200 OK", response_data, "application/json")
-                        client_socket.send(response.encode())
-                    except Exception as e:
-                        print(f"Error in get-version-details: {str(e)}")
-                        error_response = json.dumps({"error": str(e)})
-                        client_socket.send(ready_to_send("500 Internal Server Error", error_response, "application/json").encode())
-
-                elif "/show-version" in request:
-                    print("in /show-version")
-                    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
-                    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
-                    version = get_header(client_socket, headers_data, r'version:\s*(\d+)')
-                    show_version(file_id, user_id, version, client_socket)
-                
-                elif "/check-viewer-status" in request:
-                    file_id = get_header(client_socket, headers_data, r'fileId:\s*(\d+)')
-                    user_id = get_header(client_socket, headers_data, r'userId:\s*(\d+)')
-                    if not file_id or not user_id:
-                        raise ValueError("File ID or User ID not provided")
-                    is_editor_or_owner = file_permissions_db.is_editor_or_owner(file_id, user_id)
-                    response = ready_to_send("200 OK", json.dumps({"isViewer": not is_editor_or_owner}), "application/json")
-                    client_socket.send(response.encode())
-                    
-                
-                elif "/new-file" in request:
-                    print("New file")
-                    user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)')
-                    filename = get_header(client_socket, headers_data, r'filename:\s*(\S+)')
-                    response = new_file(client_socket, PATH_TO_FOLDER, headers_data)
-                    if not response:
-                        raise Exception("File creation failed")
-                    client_socket.send(response.encode())
-
-                elif "/load" in request:
-                    try:
-                        print("Load")
-                        fileId = get_header(client_socket, headers_data, r'fileId:\s*(\S+)')
-                        file_status_and_name = file_db.get_filename_by_id(fileId)
-                        filename = file_status_and_name['filename']
-                        status = file_status_and_name['status']
-                        if not fileId:
-                            raise ValueError("File ID not provided")
-                        if status == 404:
-                            print(filename)
-                            response = ready_to_send("404 Not Found", filename, "application/json")
-                            client_socket.send(response.encode())
-                        else:
-                            file_path = f"{PATH_TO_FOLDER}/uploads/{filename}"
-                            print("fileID: " + fileId + " name: " + filename)
-                            if not os.path.exists(file_path):
-                                response_data = json.dumps({'fullContent': ''})
-                            else:
-                                with open(file_path, 'r') as file:
-                                    content = file.read()
-                                    response_data = json.dumps({
-                                        'fullContent': content
-                                    })
-
-                            print("loaded successfully")
-                            lastModID = change_log_db.get_last_mod_id(fileId)
-                            response_data = {
-                                'lastModID': lastModID,
-                                'fullContent': content
-                            }
-                            response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
-                            client_socket.send(response.encode())
-
-                    except Exception as e:
-                        print(f"Error in load handler: {str(e)}")
-                        error_response = json.dumps({'error': str(e)})
-                        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
-                        client_socket.send(response.encode() + error_response.encode('utf-8'))
-                
-                if "/get-public-key" in request:
-                    try:
-                        public_key_string = rsa_manager.get_public_key_string()
-                        response_data = json.dumps({"publicKey": public_key_string})
-                        response = ready_to_send("200 OK", response_data, "application/json")
-                        client_socket.send(response.encode())
-                        return
-                    except Exception as e:
-                        print(f"Error getting public key: {str(e)}")
-                        handle_500(client_socket)
-                        return
-
-                elif "imgs/" in request or request == "//":  # for windows change to // for mac //
-
-                    if file_forbidden(PATH_TO_FOLDER + request, FORBIDDEN):
-                        handle_403(client_socket)
-
-                    elif not file_exist(PATH_TO_FOLDER + request):
-                        handle_404(client_socket)
-
-                    else:
-                        request, file_type = find_file_type(request)
-                        print("Geting a file - " + request)
-
-                        with open(PATH_TO_FOLDER + request, "rb") as file3:
-                            status = "200 OK"
-                            photo = file3.read()
-                        response = ready_to_send(status, photo, file_type)
-                        #client_socket.send(response.encode() + photo)
-                        client_socket.send(ready_to_send("404 not Found","no photo", "text/html"))
-
-                elif "." in request or "/" == request:  # is the last option/elif
-                    request, file_type = find_file_type(request)
-                    print("Geting a file - " + request)
-
-                    if file_forbidden(PATH_TO_FOLDER + request, FORBIDDEN):
-                        handle_403(client_socket)
-
-                    elif not file_exist(PATH_TO_FOLDER + request):
-                        handle_404(client_socket)
-                    
-                    else:
-                        with open(PATH_TO_FOLDER + request, "r") as file2:
-                            code = file2.read()
-                            status = "200 OK"
-                            response = ready_to_send(status, code, file_type)
-                            response += code
-                            client_socket.send(response.encode())
-                    
-
-                else:
-                    print("last else 500")
-                    handle_500(client_socket)
-
+                handle_get_requests(client_socket, request, headers_data, PATH_TO_FOLDER, FORBIDDEN)
             elif action == "POST":
-                try:
-                    match = re.search(r'Content-Length: (\d+)', headers_data)
-                    if not match:
-                        print("Content-Length header not found")
-                        raise ValueError("Content-Length header not found")
-
-                    content_length = int(match.group(1))
-                    if "/login" in request:
-                        body = client_socket.recv(content_length).decode()
-                        data = json.loads(body)
-                        
-                        # Check if data is encrypted
-                        if 'encrypted' in data and data['encrypted']:
-                            # Decrypt the credentials
-                            decrypted_username = rsa_manager.decrypt(data.get('username'))
-                            decrypted_password = rsa_manager.decrypt(data.get('password'))
-                            
-                            if not decrypted_username or not decrypted_password:
-                                response = {'status': 400, 'message': 'Failed to decrypt credentials'}
-                                client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
-                                return
-                                
-                            username = decrypted_username
-                            password = decrypted_password
-                        else:
-                            # Handle unencrypted data (for backwards compatibility)
-                            username = data.get('username')
-                            password = data.get('password')
-                        
-                        response = user_db.login(username, password)
-                        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
-                    
-                    # Update signup to handle encrypted data  
-                    elif "/signup" in request:
-                        body = client_socket.recv(content_length).decode()
-                        data = json.loads(body)
-                        
-                        # Check if data is encrypted
-                        if 'encrypted' in data and data['encrypted']:
-                            # Decrypt the credentials
-                            decrypted_username = rsa_manager.decrypt(data.get('username'))
-                            decrypted_password = rsa_manager.decrypt(data.get('password'))
-                            
-                            if not decrypted_username or not decrypted_password:
-                                response = {'status': 400, 'message': 'Failed to decrypt credentials'}
-                                client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
-                                return
-                                
-                            username = decrypted_username
-                            password = decrypted_password
-                        else:
-                            # Handle unencrypted data (for backwards compatibility)
-                            username = data.get('username')
-                            password = data.get('password')
-                        
-                        response = user_db.signup(username, password)
-                        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
-                    
-                    elif "/grant-user-to-file" in request or "/revoke-user-to-file" in request:
-                        body = client_socket.recv(content_length).decode()
-                        data = json.loads(body)
-                        username = data.get('username')
-                        userID = user_db.get_user_id(username)
-                        fileID = data.get('fileID')
-                        role = data.get('role')
-                        ownerID = get_header(client_socket,headers_data,r'ownerID:\s*(\d+)')
-
-                        if not userID :
-                            client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not a user!!"), "application/json").encode())  
-
-                        elif not ownerID or not file_db.is_owner(int(fileID), int(ownerID)):
-                            client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
-
-                        else:
-                            if "/revoke-user-to-file" in request:
-                                response = file_permissions_db.revoke_access(fileID,userID)
-                                client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
-                            elif "/grant-user-to-file" in request:
-                                response = file_permissions_db.grant_access(fileID,userID,role)
-                                client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
-
-                    
-                    elif "/save-new-version" in request:
-                        print("in save-new-version")
-                        print("headers_data: " + headers_data)
-                        body = client_socket.recv(content_length).decode()
-                        data = json.loads(body)
-                        fileID = data.get('fileID')
-                        userID = data.get('userID')
-                        content = data.get('content')
-                        response = version_log_db.add_version(int(fileID),content)
-                        client_socket.send(ready_to_send(response['status'], json.dumps(response['message']), "application/json").encode())
-                    
-
-
-                    elif "/disconnection" in request:
-                        body = ""
-                        if content_length > 0:
-                            body = client_socket.recv(content_length).decode()
-                        return  # Exit the function
-
-                    elif "/upload-file" in request: 
-                        print("------------------")
-                        print("in uploads")
-                        content = get_content_of_upload(client_socket, content_length)
-                        print("after content")
-                        if content:
-                            new_file(client_socket, PATH_TO_FOLDER, headers_data,content)
-                        else:
-                            client_socket.send(ready_to_send("400 Bad Request", "Broken pipe or No content"))
-
-
-                except Exception as e:
-                    print(f"Error processing POST request: {str(e)}")
-                    handle_500(client_socket)
-
+                handle_post_requests(client_socket, request, headers_data, PATH_TO_FOLDER)
             elif action == "DELETE":
-                if "/delete-version" in request:
-                    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
-                    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
-                    version = get_header(client_socket, headers_data, r'version:\s*(\d+)')
-
-                    if not file_id or not user_id or not version:
-                            raise ValueError("File ID, User ID or Version not provided")
-                    if not file_db.is_owner(int(file_id), int(user_id)):
-                        client_socket.send(ready_to_send("500 Internal Server Error", "Not owner!!", "text/plain").encode())
-                    else:
-                        result = version_log_db.delete_version(version,file_id)
-                        client_socket.send(ready_to_send(result['status'], result["message"], "text/plain").encode())
-
-                elif "/delete-file" in request:
-                    try:
-                        
-                        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)')
-                        user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)')
-                        
-                        if not file_id or not user_id:
-                            raise ValueError("File ID or User ID not provided")
-                        if not file_db.is_owner(int(file_id), int(user_id)):
-                            client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
-                        file_result = file_db.delete_file(file_id)
-
-                        if file_result['status'] != 200:
-                            response = ready_to_send(str(file_result['status']), json.dumps({"error": file_result['message']}), "application/json")
-                            client_socket.send(response.encode())
-                            return
-
-                        permissions_result = file_permissions_db.delete_file_permissions(file_id)
-                        if permissions_result['status'] != 200:
-                            response = ready_to_send(str(permissions_result['status']), json.dumps({"error": permissions_result['message']}), "application/json")
-                            client_socket.send(response.encode())
-                            return
-
-                        # Delete file from the filesystem
-                        try:
-                            file_path = os.path.join(PATH_TO_FOLDER, "uploads", file_result['filename'])
-                            if os.path.exists(file_path):
-                                os.remove(file_path)
-                        except Exception as e:
-                            print(f"Error deleting file from filesystem: {str(e)}")
-
-                        response = ready_to_send("200 OK", json.dumps({"message": "File deleted successfully"}), "application/json")
-                        client_socket.send(response.encode())
-                    except Exception as e:
-                        print(f"Error in delete-file: {str(e)}")
-                        error_response = json.dumps({"error": str(e)})
-                        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
-                        client_socket.send(response.encode())
-
+                handle_delete_requests(client_socket, request, headers_data, PATH_TO_FOLDER)
             else:
-                print("received unknown action! action: " + action)
+                logger.warning(f"Unknown HTTP method: {action}")
 
         except ConnectionResetError:
-            print(f"Connection reset by peer: {client_address} in thread {num_thread}")
+            logger.warning(f"Connection lost: {client_ip} (Thread #{num_thread})")
         except socket.timeout:
-            print(f"Socket timeout for client {client_address} in thread {num_thread}")
+            logger.warning(f"Request timeout: {client_ip} (Thread #{num_thread})")
         except Exception as e:
-            print(f"Error handling client {client_address}: {str(e)}")
-            # Optionally, send an error response to the client
+            logger.error(f"Request failed from {client_ip}: {str(e)}")
             error_response = ready_to_send("500 Internal Server Error", str(e), "text/plain")
             client_socket.send(error_response.encode())
 
     finally:
         client_socket.close()
-        if not "/poll-updates" in request: 
-            print(f"Disconnected client {client_address}")
-            print("_________________________")
+        if "/poll-updates" not in locals() or "/poll-updates" not in request:
+            logger.info(f"Connection closed: {client_ip}")
+
 
 def start_main_server(host='127.0.0.1', port=8000):
+    """Start the main server with improved logging"""
+    logger.info("Starting main server...")
+    
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((host, port))
-    server_socket.listen(100)  # Allow up to 5 queued connections
-    print('Main server is up and running')
-    print("Link: http://"+ host + ":8000")
-    print()
+    server_socket.listen(100)
+    
+    logger.info(f"Main server is up and running on {host}:{port}")
+    logger.info(f"Link: http://{host}:{port}")
+    
     num_thread = 0
-    print("Waiting for connections...")
+    logger.info("Waiting for connections...")
+    
     while True:
         try:
             client_socket, client_address = server_socket.accept()
-
-            num_thread = num_thread + 1
-
+            num_thread += 1
+            
+            logger.debug(f"New connection from {client_address} - Thread {num_thread}")
+            
             # Create a new thread to handle the client
-            client_thread = threading.Thread(target=handle_client, args=(client_socket, client_address, num_thread), daemon=True)
+            client_thread = threading.Thread(
+                target=handle_client, 
+                args=(client_socket, client_address, num_thread), 
+                daemon=True
+            )
             client_thread.start()
 
         except Exception as e:
-            print(f"Error accepting connection: {str(e)}")
+            logger.error(f"Error accepting connection: {str(e)}")
+
+if __name__ == "__main__":
+    start_main_server()
