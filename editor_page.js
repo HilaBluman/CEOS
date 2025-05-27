@@ -866,7 +866,7 @@ async function createNewFile(filename) {
         document.getElementById('file-popup').style.display = 'none';
 
         await selectFile(data.fileId, filename);
-        await loadFile(data.fileId);
+        //await loadFile(data.fileId);
         console.log('✅ New file created successfully');
         showNotification('File created successfully!', 'success');
 
