@@ -3,7 +3,123 @@ let isEditorReady = false;
 const host = '192.168.68.54'
 const main_url = 'http://'+ host +':8000'
 
+// RSA Encryption Class with better error handling
+class ClientEncryption {
+    constructor() {
+        this.jsencrypt = null;
+        this.isReady = false;
+        this.encryptionMode = 'none'; // 'rsa', 'fallback', or 'none'
+        this.initializeEncryption();
+    }
+
+    initializeEncryption() {
+        try {
+            if (typeof JSEncrypt !== 'undefined') {
+                this.jsencrypt = new JSEncrypt();
+                this.encryptionMode = 'rsa';
+                console.log('✅ JSEncrypt initialized successfully');
+            } else {
+                console.warn('⚠️ JSEncrypt not available - encryption disabled');
+                this.encryptionMode = 'none';
+            }
+        } catch (error) {
+            console.error('❌ Error initializing JSEncrypt:', error);
+            this.encryptionMode = 'none';
+        }
+    }
+
+    async getPublicKey() {
+        if (this.encryptionMode === 'none') {
+            console.log('🔓 Running in no-encryption mode');
+            return true;
+        }
+
+        try {
+            const response = await fetch('/get-public-key', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            if (this.jsencrypt) {
+                const pemKey = this.base64ToPem(data.publicKey);
+                this.jsencrypt.setPublicKey(pemKey);
+                this.isReady = true;
+                console.log('🔑 Public key obtained and set successfully');
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('❌ Error getting public key:', error);
+            this.encryptionMode = 'none';
+            console.log('🔓 Falling back to no-encryption mode');
+            return true; // Continue without encryption
+        }
+    }
+
+    base64ToPem(base64Key) {
+        const pemHeader = '-----BEGIN PUBLIC KEY-----\n';
+        const pemFooter = '\n-----END PUBLIC KEY-----';
+        const formatted = base64Key.match(/.{1,64}/g).join('\n');
+        return pemHeader + formatted + pemFooter;
+    }
+
+    encrypt(text) {
+        if (this.encryptionMode === 'none' || !this.jsencrypt || !this.isReady) {
+            return text; // Return unencrypted text
+        }
+
+        try {
+            const encrypted = this.jsencrypt.encrypt(text);
+            if (!encrypted) {
+                console.warn('⚠️ Encryption failed - returning original text');
+                return text;
+            }
+            return encrypted;
+        } catch (error) {
+            console.warn('⚠️ Encryption error - returning original text:', error);
+            return text;
+        }
+    }
+
+    isEncryptionAvailable() {
+        return this.encryptionMode === 'rsa' && this.isReady;
+    }
+}
+
+// Global RSA instance
+let clientRSA;
+
+// Improved JSEncrypt waiting function with timeout
+function waitForJSEncrypt(timeout = 5000) {
+    return new Promise((resolve) => {
+        const startTime = Date.now();
+        
+        const checkJSEncrypt = () => {
+            if (typeof JSEncrypt !== 'undefined') {
+                console.log('✅ JSEncrypt loaded successfully');
+                resolve(true);
+            } else if (Date.now() - startTime > timeout) {
+                console.warn('⚠️ JSEncrypt loading timeout - continuing without encryption');
+                resolve(false);
+            } else {
+                setTimeout(checkJSEncrypt, 50);
+            }
+        };
+        
+        checkJSEncrypt();
+    });
+}
+
 require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' }});
+
 async function initializeEditor() {
     await new Promise((resolve) => {
         require(['vs/editor/editor.main'], async function () {
@@ -158,8 +274,6 @@ async function initializeEditor() {
     });
 }
 
-
-
 // Function to use codeEditor safely
 function useCodeEditor(callback) {
     if (isEditorReady) {
@@ -170,7 +284,6 @@ function useCodeEditor(callback) {
         });
     }
 }
-
 
 // Flags and Variables
 let isApplyingUpdates = false;
@@ -197,9 +310,7 @@ let startWidth;
 let rightPanel;
 let mainSection;
 
-
 let undoTriggered = false;
-
 
 function onDocumentMouseMove(e) {
     if (!isResizing) return;
@@ -249,18 +360,65 @@ const languageMap = {
     'powershell': 'powershell'
 };
 
+// Improved initialization with better error handling
 document.addEventListener('DOMContentLoaded', async () => {
-    await initializeEditor();
-    await loadInitialFile();
+    try {
+        console.log('🚀 Starting application initialization...');
+        
+        // Show loading message to user
+        showNotification('Loading application...', 'info');
+        
+        // Wait for JSEncrypt with timeout
+        const jsEncryptLoaded = await waitForJSEncrypt(5000);
+        
+        if (jsEncryptLoaded) {
+            console.log('✅ JSEncrypt loaded successfully');
+        } else {
+            console.log('⚠️ Continuing without JSEncrypt - encryption disabled');
+            showNotification('Running in fallback mode (encryption disabled)', 'warning');
+        }
+        
+        // Initialize RSA (will work with or without JSEncrypt)
+        clientRSA = new ClientEncryption();
+        
+        // Initialize Monaco Editor
+        console.log('📝 Initializing Monaco Editor...');
+        await initializeEditor();
+        console.log('✅ Monaco Editor initialized');
+        
+        // Initialize RSA encryption
+        console.log('🔐 Setting up encryption...');
+        await clientRSA.getPublicKey();
+        
+        // Load initial file
+        console.log('📂 Loading initial file...');
+        await loadInitialFile();
+        
+        console.log('🎉 Application initialization complete!');
+        showNotification('Application loaded successfully!', 'success');
+        
+    } catch (error) {
+        console.error('❌ Error during initialization:', error);
+        showNotification('Error loading application: ' + error.message, 'error');
+        
+        // Try to continue without all features
+        try {
+            if (!isEditorReady) {
+                await initializeEditor();
+            }
+            clientRSA = new ClientRSA(); // Fallback mode
+            await loadInitialFile();
+        } catch (fallbackError) {
+            console.error('❌ Fallback initialization also failed:', fallbackError);
+            showNotification('Critical error - please refresh the page', 'error');
+        }
+    }
 });
-
-
 
 function recognizEnterKey(event) {
     if (event.key === 'Enter') {
         isEnter = true; 
     }
-
 }
 
 document.addEventListener('paste', handlePaste)
@@ -272,9 +430,6 @@ document.addEventListener('keydown', onDocumentKeySave);
 
 document.addEventListener('selectionchange', isTextHighlighted);
 window.addEventListener("pagehide", pageHide);
-
-
-
 
 useCodeEditor((editor) => {
     editor.onDidChangeModelContent(async (event) => {
@@ -395,9 +550,8 @@ function changeEditorLanguage(extension) {
     }
 }
 
-
 // Helper Functions
-function pageHide(event){
+function pageHide(event){ 
     console.log("in pageHide")
     if (event.persisted) {
         console.log("Page is being persisted in cache.");
@@ -456,7 +610,6 @@ async function saveAll() {
 }
 
 async function saveInput(modification) {
-
     try {
         const encodedModification = encodeURIComponent(modification);
         const url = "/save?modification=" + encodedModification;
@@ -481,28 +634,47 @@ async function saveInput(modification) {
     }
 }
 
-async function loadContent(fileId) {
+// Improved loadFile function with better encryption handling
+async function loadFile(fileId) {
     try {
+        console.log(`📂 Loading file ${fileId}...`);
+        
+        let headers = { 'Connection': 'keep-alive' };
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable()) {
+            console.log('🔒 Loading file with RSA encryption...');
+            const encryptedFileId = clientRSA.encrypt(fileId.toString());
+            headers['fileId'] = encryptedFileId;
+            headers['encrypted'] = 'true';
+        } else {
+            console.log('🔓 Loading file without encryption...');
+            headers['fileId'] = fileId.toString();
+        }
+        
         const response = await fetch('/load', {
             method: 'GET',
-            headers: { 
-                'fileId': fileId,
-                'Connection': 'keep-alive'
-            }
+            headers: headers
         });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
         if (data.fullContent) {
             Loadeing = true;
             lastModID = data.lastModID;
             console.log("lastModID: " + lastModID);
             codeEditor.setValue(data.fullContent);
+            console.log('✅ File loaded successfully');
+            startPolling();
         }
-        //startPolling();
+        
     } catch (error) {
-        console.error('Error loading initial content:', error);
+        console.error('❌ Error loading file:', error);
+        showNotification('Error loading file: ' + error.message, 'error');
     }
 }
-
 
 let selectedFileId = null;
 let selectedFileName = null;
@@ -547,13 +719,26 @@ async function checkViewerStatus() {
     }
 }
 
-async function GetUserFiles(userId) {
+// Improved getUserFiles function
+async function getUserFiles(userId) {
     try {
+        console.log(`👤 Getting files for user ${userId}...`);
+        
+        let headers = {};
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable()) {
+            console.log('🔒 Getting user files with RSA encryption...');
+            const encryptedUserId = clientRSA.encrypt(userId.toString());
+            headers['userId'] = encryptedUserId;
+            headers['encrypted'] = 'true';
+        } else {
+            console.log('🔓 Getting user files without encryption...');
+            headers['userId'] = userId.toString();
+        }
+
         const response = await fetch('/get-user-files', {
             method: 'GET',
-            headers: {
-                'userId': userId
-            }
+            headers: headers
         });
 
         if (!response.ok) {
@@ -562,13 +747,15 @@ async function GetUserFiles(userId) {
         }
 
         const data = await response.json();
+        console.log('✅ User files retrieved successfully');
         return {
             fileIds: data.filesId,
             filenames: data.filenames
-        }; 
+        };
     } catch (error) {
-        console.error('Error fetching user files:', error);
-        return [];
+        console.error('❌ Error fetching user files:', error);
+        showNotification('Error fetching files: ' + error.message, 'error');
+        return { fileIds: [], filenames: [] };
     }
 }
 
@@ -576,7 +763,7 @@ async function loadInitialFile() {
     username = await get_username(); 
     userID = await get_userID(); 
 
-    const filesInfo = await GetUserFiles(userID);
+    const filesInfo = await getUserFiles(userID);
 
     populateFileLists(filesInfo);
 
@@ -609,9 +796,9 @@ function populateFileLists(filesInfo) {
 
                 popupListItem.classList.add('selected');
                 sidebarListItem.classList.add('selected');
-                selectFile(fileId, filename);
+                await selectFile(fileId, filename);
+                await loadFile(fileId);
                 
-                await loadContent(fileId);
                 document.getElementById('file-popup').style.display = 'none';
                 document.getElementById('file-details').classList.remove('slide-in');
                 document.getElementById('versions-details').classList.remove('slide-in');
@@ -628,69 +815,95 @@ function populateFileLists(filesInfo) {
     }
 }
 
-
+// Improved createNewFile function
 async function createNewFile(filename) {
     if (!hasValidExtension(filename)) {
-            filename = filename.replace(/\..*$/, '.txt');
+        filename = filename.replace(/\..*$/, '.txt');
     } 
-        try {
-            const response = await fetch('/new-file', {
-                method: 'GET',
-                headers: {
-                    'userId': userID,
-                    'filename': filename
-                }
-            });
-
-            const data = await response.json();
-
-            if (response.status === 409) {
-                showNotification('A file with this name already exists. Please choose a different name.', 'error');
-                return;
-            }
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            if (data.fileId !== 0) {
-                fileID = data.fileId;
-            }
-
-            const fileTree = document.querySelector('.file-tree');
-            const newFileItem = document.createElement('li');
-            newFileItem.innerHTML = `📄 ${filename}`;
-            newFileItem.setAttribute('data-file-id', data.fileId);
-            fileTree.appendChild(newFileItem);
-
-            codeEditor.setValue('// New file');
-            
-            const currentFileTab = document.getElementById('current-file-tab');
-            currentFileTab.textContent = filename;
-            currentFileTab.classList.add('active-tab');
-
-            document.getElementById('file-popup').style.display = 'none';
-
-            await loadContent(data.fileId);
-
-        } catch (error) {
-            console.error('Error creating new file:', error);
-            showNotification('Failed to create new file. Please try again.', 'error');
+    
+    try {
+        console.log(`📝 Creating new file: ${filename}`);
+        
+        let headers = {};
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable()) {
+            console.log('🔒 Creating new file with RSA encryption...');
+            headers['userId'] = clientRSA.encrypt(userID.toString());
+            headers['filename'] = clientRSA.encrypt(filename);
+            headers['encrypted'] = 'true';
+        } else {
+            console.log('🔓 Creating new file without encryption...');
+            headers['userId'] = userID.toString();
+            headers['filename'] = filename;
         }
+
+        const response = await fetch('/new-file', {
+            method: 'GET',
+            headers: headers
+        });
+
+        const data = await response.json();
+
+        if (response.status === 409) {
+            showNotification('A file with this name already exists. Please choose a different name.', 'error');
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        if (data.fileId !== 0) {
+            fileID = data.fileId;
+        }
+
+        const fileTree = document.querySelector('.file-tree');
+        const newFileItem = document.createElement('li');
+        newFileItem.innerHTML = `📄 ${filename}`;
+        newFileItem.setAttribute('data-file-id', data.fileId);
+        fileTree.appendChild(newFileItem);
+        codeEditor.setValue('// New file');
+        document.getElementById('file-popup').style.display = 'none';
+
+        await selectFile(data.fileId, filename);
+        await loadFile(data.fileId);
+        console.log('✅ New file created successfully');
+        showNotification('File created successfully!', 'success');
+
+    } catch (error) {
+        console.error('❌ Error creating new file:', error);
+        showNotification('Failed to create new file. Please try again.', 'error');
+    }
 }
 
+// Improved uploadNewFile function
 async function uploadNewFile(fileContent, filename) {
     try {
+        console.log(`📤 Uploading file: ${filename}`);
+        
+        let headers = { 'Content-Type': 'application/json' };
+        let body = {};
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable()) {
+            console.log('🔒 Uploading file with RSA encryption...');
+            headers['filename'] = clientRSA.encrypt(filename);
+            headers['userId'] = clientRSA.encrypt(userID.toString());
+            headers['encrypted'] = 'true';
+            body = {
+                content: clientRSA.encrypt(fileContent),
+                encrypted: true
+            };
+        } else {
+            console.log('🔓 Uploading file without encryption...');
+            headers['filename'] = filename;
+            headers['userId'] = userID.toString();
+            body = { content: fileContent };
+        }
+
         const response = await fetch('/upload-file', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'filename': filename,
-                'userId': userID
-            },
-            body: JSON.stringify({
-                content: fileContent
-            })
+            headers: headers,
+            body: JSON.stringify(body)
         });
 
         if (!response.ok) {
@@ -698,18 +911,20 @@ async function uploadNewFile(fileContent, filename) {
         }
 
         const result = await response.json();
-        console.log('File uploaded successfully:', result);
+        console.log('✅ File uploaded successfully:', result);
 
         const fileTree = document.querySelector('.file-tree');
         const newFileItem = document.createElement('li');
         newFileItem.innerHTML = `📄 ${filename}`;
         newFileItem.setAttribute('data-file-id', result.fileId);
         fileTree.appendChild(newFileItem);
-
-        selectFile(result.fileId, filename);
-        await loadContent(result.fileId);
+        await selectFile(result.fileId, filename);
+        await loadFile(result.fileId);
+        showNotification('File uploaded successfully!', 'success');
+        
     } catch (error) {
-        console.error('Error uploading file:', error);
+        console.error('❌ Error uploading file:', error);
+        showNotification('Failed to upload file: ' + error.message, 'error');
         throw error;
     }
 }
@@ -906,6 +1121,7 @@ async function pollForUpdates() {
 }
 
 function startPolling() {
+    console.log("in start polling");
     pollingInterval = true;
     pollForUpdates();
 }
@@ -970,8 +1186,6 @@ function promptUploadFile() {
     document.getElementById('mini-popup').style.display = 'none';
 }
 
-
-
 document.addEventListener('click', (e) => {
     const popup = document.getElementById('mini-popup');
     const plusBtn = document.querySelector('button[onclick^="newFile"]');
@@ -983,7 +1197,6 @@ document.addEventListener('click', (e) => {
         popup.style.display = 'none';
     }
 });
-
 
 function popFileInfo(popupVariation) {
     if (!fileID || !selectedFileName) {
@@ -1191,7 +1404,6 @@ async function loadFileDetails() {
     }
 }
 
-
 function hasValidExtension(filename) {
     if (!filename) return false;
     const validExtensions = [
@@ -1266,10 +1478,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-
+// Improved showNotification function with better styling
 function showNotification(message, type = 'info') {
     const notification = document.getElementById('notification');
-    notification.className = `notification ${type === 'success' ? 'success-notification' : 'error-notification'}`;
+    
+    // Remove existing classes
+    notification.className = 'notification';
+    
+    // Add appropriate class based on type
+    switch(type) {
+        case 'success':
+            notification.className += ' success-notification';
+            break;
+        case 'error':
+            notification.className += ' error-notification';
+            break;
+        case 'warning':
+            notification.className += ' warning-notification';
+            break;
+        default:
+            notification.className += ' info-notification';
+    }
+    
     notification.innerText = message;
     notification.style.display = 'block';
     notification.style.opacity = '1';
@@ -1338,12 +1568,10 @@ async function showVersion(){
         console.error('Error saving showing version:', error);
         showNotification('Error saving showing version', 'error');
     }
-    
 }
 
-
 async function refreshFiles(){
-    const filesInfo = await GetUserFiles(userID);
+    const filesInfo = await getUserFiles(userID);
     populateFileLists(filesInfo);
     
     if (fileID) {
