@@ -1,8 +1,8 @@
 create:
-* deleting files
+✔️ deleting files
 * add the user name next to the curser of the person that is editing the file (maybe use different colors foe each person) - see whatsupp
 * add an option to see the changes that happend from the a spacific time and date (using the changes to go back? than use LSC to show the changes) - see whatsupp
-* maybe add versions - see whatsupp (save every 20 modiftions or 1 day if less modiftions) (if no modftions for a long time it wont save an till there i modiftion)
+✔️ maybe add versions - see whatsupp (if no modftions for a long time it wont save an till there i modiftion)
 
 
 applyUpdate:
@@ -31,7 +31,6 @@ important:
 
 
 less significant:
-* what is async??? (read about it)
 ⚪️ fix resizing - so right panle will show all ways
 ⚪️ the icon is not loading
 ⚪️ need to not let the server acces the rest of my computer only CEOs folder and within
@@ -89,7 +88,7 @@ first line and the rest. solve(send all the lines in the mid as one insert.)
 ✔️save is lag and slow
 
 check on:
-⚪️ need protection from code & SCL injctions. 
+✔️ need protection from code & SCL injctions. 
 
 
 1. https://www.geeksforgeeks.org/longest-common-subsequence-dp-4/
