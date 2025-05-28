@@ -28,6 +28,13 @@ class ClientEncryption {
         }
     }
 
+    base64ToPem(base64Key) {
+        const pemHeader = '-----BEGIN PUBLIC KEY-----\n';
+        const pemFooter = '\n-----END PUBLIC KEY-----';
+        const formatted = base64Key.match(/.{1,64}/g).join('\n');
+        return pemHeader + formatted + pemFooter;
+    }
+
     async getPublicKey() {
         if (this.encryptionMode === 'none') {
             console.log('🔓 Running in no-encryption mode');
@@ -62,13 +69,6 @@ class ClientEncryption {
             console.log('🔓 Falling back to no-encryption mode');
             return true; // Continue without encryption
         }
-    }
-
-    base64ToPem(base64Key) {
-        const pemHeader = '-----BEGIN PUBLIC KEY-----\n';
-        const pemFooter = '\n-----END PUBLIC KEY-----';
-        const formatted = base64Key.match(/.{1,64}/g).join('\n');
-        return pemHeader + formatted + pemFooter;
     }
 
     encrypt(text) {
@@ -719,7 +719,7 @@ async function checkViewerStatus() {
     }
 }
 
-// Improved getUserFiles function
+
 async function getUserFiles(userId) {
     try {
         console.log(`👤 Getting files for user ${userId}...`);
@@ -995,8 +995,6 @@ function getRangeAndContent(update) {
     const model = codeEditor.getModel();
     let range;
 
-   const linesCount = model.getLineCount();
-
     if (action === "delete highlighted") { 
         range = new monaco.Range(
             row,            // Convert 0-based to 1-based
@@ -1236,11 +1234,20 @@ async function loadVersionDetails() {
         const data = await response.json();
 
         const isOwner = data.owner_id === parseInt(userID);
+        document.getElementById('filename2').textContent = selectedFileName;
 
-        const userManagementControls = document.querySelectorAll('#delete-version-btn');
-        userManagementControls.forEach(control => {
-            control.style.display = isOwner ? 'block' : 'none';
-        });
+        // Show/hide buttons based on viewer status and ownership
+        const deleteVersionBtn = document.getElementById('delete-version-btn');
+        const saveVersionBtn = document.getElementById('save-version-btn');
+        
+        if (isViewer) {
+            deleteVersionBtn.style.display = 'none';
+            saveVersionBtn.style.display = 'none';
+        } else {
+            deleteVersionBtn.style.display = isOwner ? 'block' : 'none';
+            saveVersionBtn.style.display = 'block';
+        }
+
         const versionsList = document.getElementById('versions-list');
         versionsList.innerHTML = ''; 
 

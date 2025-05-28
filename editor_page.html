@@ -5,6 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Code Online Editor Sharing</title>
         <link rel="stylesheet" href="css/editor_page.css">
+        <link rel="icon" href="/imgs/icon.ico" type="image/icon">
         <script>
             window.define_backup = window.define;
             window.define = undefined;
@@ -94,7 +95,7 @@
 
 <!-- File details popup -->
 <div id="file-details" class="side-panel">
-  <h2 id="file-name">File Name: <span id="filename"></span></h2>
+    <h2 id="file-name">File Name: <span id="filename"></span></h2>
   <h3>Users with Access:</h3>
   <table id="user-table">
       <thead>
@@ -134,7 +135,7 @@
 
 <!-- versions details popup -->
 <div id="versions-details" class="side-panel">
-  <h2 id="file-name">File Name: <span id="filename"></span></h2>
+  <h2 id="file-name">File Name: <span id="filename2"></span></h2>
   <h3>Versions:</h3>
   <table id="version-table">
       <thead>
@@ -150,8 +151,8 @@
   </table>
   <input type="text" id="input-version-btn" placeholder="Choose a Version">
   <button id="show-version-btn" onclick="showVersion()">Show Version</button>
-  <button id="delete-version-btn" onclick="confirmDelete('version')">Delete Version</button>
-  <button id="save-version-btn" onclick="saveNewVersion('version')">Save New Version</button>
+  <button id="delete-version-btn" onclick="confirmDelete('version')" style="display: none;">Delete Version</button>
+  <button id="save-version-btn" onclick="saveNewVersion('version')" style="display: none;">Save New Version</button>
   <button id="close-panel-V-btn">Close</button>
 </div>
 

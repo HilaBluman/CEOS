@@ -206,7 +206,7 @@
     <!-- Include JSEncrypt library for RSA -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsencrypt/3.3.2/jsencrypt.min.js"></script>
     <script>
-        class ClientRSA {
+        class ClientEncryption {
             constructor() {
                 this.jsencrypt = new JSEncrypt();
                 this.isReady = false;
@@ -264,7 +264,7 @@
         }
 
         // Global RSA instance
-        const clientRSA = new ClientRSA();
+        const clientRSA = new ClientEncryption();
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', async () => {

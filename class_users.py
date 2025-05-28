@@ -373,6 +373,22 @@ class FilePermissionsDatabase:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def is_viewer(self, file_id, user_id):
+        """Check if a user has viewer role for a file"""
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT role
+            FROM filePermissions
+            WHERE fileID = ? AND userID = ?
+        ''', (file_id, user_id))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        return result and result['role'] == 'viewer'
+
     def grant_access(self, fileID, userID, role=None):
         conn = self.get_db_connection()
         cursor = conn.cursor()

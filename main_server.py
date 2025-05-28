@@ -6,7 +6,6 @@ import threading
 import urllib.parse
 import fcntl
 import logging
-from difflib import SequenceMatcher
 from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase, RSAManager
 
 # Set up logging
@@ -89,7 +88,7 @@ def file_forbidden(file_path, forbidden):
     return is_forbidden
 
 
-def ready_to_send(status, data_file, content_type="text/html"):
+def ready_to_send(status, data_file, content_type="text/html",Cache=False):
     """Prepare HTTP response headers"""
     logger.debug(f"Preparing response: {status}, content_type: {content_type}")
     headers = f"HTTP/1.1 {status}\r\n"
@@ -98,6 +97,8 @@ def ready_to_send(status, data_file, content_type="text/html"):
         content_length = len(data_file)
     else:
         content_length = len(data_file.encode('utf-8'))
+    if Cache:
+        headers += f"Cache-Control: public, max-age=31536000\r\n"
     headers += f"Content-Length: {content_length}\r\n"
     headers += f"Connection: close\r\n"
     headers += "\r\n"
@@ -105,8 +106,8 @@ def ready_to_send(status, data_file, content_type="text/html"):
     return headers + str(data_file)
 
 
-def find_file_type(request):
-    """Determine file type and adjust request path"""
+"""def find_file_type(request):
+    #Determine file type and adjust request path
     logger.debug(f"Finding file type for request: {request}")
     
     if request == "/":
@@ -125,7 +126,7 @@ def find_file_type(request):
     
     logger.debug(f"Determined file type: {file_type} for request: {request}")
     return request, file_type
-
+"""
 
 def get_content_of_upload(client_socket, content_length):
     """Receive file upload content from client"""
@@ -215,18 +216,30 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
     if not user_id:
         logger.error("User ID not found in headers")
         return
+                
+    decrypted_user_id = rsa_manager.decrypt(user_id)
+
+    if not decrypted_user_id:
+        logger.error("No valid userId header found")
+        return
     
     filename = get_header(client_socket, headers_data, r'filename:\s*(\S+)', "filename")
     if not filename:
         logger.error("Filename not found in headers")
         return
     
-    logger.info(f"Creating file '{filename}' for user {user_id}")
+    decrypted_filename = rsa_manager.decrypt(filename)
+
+    if not decrypted_filename:
+        logger.error("No valid userId header found")
+        return
+    
+    logger.info(f"Creating file '{decrypted_filename}' for user {decrypted_user_id}")
     
     # Check if filename already exists for this user
-    existing_file = file_db.check_file_exists(user_id, filename)
+    existing_file = file_db.check_file_exists(decrypted_user_id, decrypted_filename)
     if existing_file:
-        logger.warning(f"File '{filename}' already exists for user {user_id}")
+        logger.warning(f"File '{decrypted_filename}' already exists for user {decrypted_user_id}")
         data = json.dumps({
             "error": "File already exists",
             "fileId": 0
@@ -234,24 +247,24 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
         response = ready_to_send("200", data, "application/json")
     else:
         # Create new file
-        result = file_db.add_file(filename, user_id)
+        result = file_db.add_file(decrypted_filename, decrypted_user_id)
         
         if result['status'] == 201:
             lines = [""]
             if value:
                 lines = value.split("/n")
             
-            file_path = PATH_TO_FOLDER + "/uploads/" + filename
+            file_path = PATH_TO_FOLDER + "/uploads/" + decrypted_filename
             with open(file_path, 'w') as file:
                 file.writelines(lines)
             
-            logger.info(f"File '{filename}' created at path: {file_path}")
+            logger.info(f"File '{decrypted_filename}' created at path: {file_path}")
             
             # Get the file ID and grant owner access
-            file_id = file_db.check_file_exists(user_id, filename)
+            file_id = file_db.check_file_exists(decrypted_user_id, decrypted_filename)
             logger.debug(f"File ID: {file_id}")
             
-            result = file_permissions_db.grant_access(file_id, user_id, "owner")
+            result = file_permissions_db.grant_access(file_id, decrypted_user_id, "owner")
             logger.info(f"Owner access granted, result: {result['status']} - {result['message']}")
 
             data = json.dumps({
@@ -349,9 +362,6 @@ def show_version(file_id, user_id, version, client_socket):
     if not file_id or not user_id or not version:
         logger.error("Missing required parameters: file_id, user_id, or version")
         raise ValueError("File ID, User ID or Version not provided")
-    elif not file_permissions_db.is_editor_or_owner(file_id, user_id):
-        logger.warning(f"User {user_id} does not have permission to see versions of file {file_id}")
-        raise ValueError("User does not have permission to see versions")
     
     fullcontent = version_log_db.get_version_fullcontent(version, file_id)
     
@@ -411,7 +421,6 @@ def save_modification(client_socket, file_id, file_name, file_path, match1, user
 # GET request handlers
 def handle_poll_updates(client_socket, headers_data):
     """Handle polling for file updates"""
-    logger.debug("Handling poll updates")
     try:
         fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
         lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)', "lastModID")
@@ -585,7 +594,7 @@ def handle_new_file_request(client_socket, headers_data, PATH_TO_FOLDER):
     """Handle new file creation requests"""
     logger.info("Handling new file request")
     
-    new_file(client_socket, PATH_TO_FOLDER, headers_data)
+    new_file(client_socket, PATH_TO_FOLDER, headers_data,"// New file'")
 
 
 def handle_load_file(client_socket, headers_data, PATH_TO_FOLDER):
@@ -595,9 +604,16 @@ def handle_load_file(client_socket, headers_data, PATH_TO_FOLDER):
     try:
         fileId = get_header(client_socket, headers_data, r'fileId:\s*(\S+)', "fileId")
         if not fileId:
+            logger.info(f"Found user ID using pattern userId: {fileId}")
             return
-        
-        file_status_and_name = file_db.get_filename_by_id(fileId)
+                
+        decrypted_file_id = rsa_manager.decrypt(fileId)
+
+        if not decrypted_file_id:
+            logger.error("No valid userId header found")
+            return
+
+        file_status_and_name = file_db.get_filename_by_id(decrypted_file_id)
         filename = file_status_and_name['filename']
         status = file_status_and_name['status']
         
@@ -607,7 +623,7 @@ def handle_load_file(client_socket, headers_data, PATH_TO_FOLDER):
             client_socket.send(response.encode())
         else:
             file_path = f"{PATH_TO_FOLDER}/uploads/{filename}"
-            logger.info(f"Loading file ID: {fileId}, name: {filename}")
+            logger.info(f"Loading file ID: {decrypted_file_id}, name: {filename}")
             
             if not os.path.exists(file_path):
                 content = ''
@@ -615,7 +631,7 @@ def handle_load_file(client_socket, headers_data, PATH_TO_FOLDER):
                 with open(file_path, 'r') as file:
                     content = file.read()
 
-            lastModID = change_log_db.get_last_mod_id(fileId)
+            lastModID = change_log_db.get_last_mod_id(decrypted_file_id)
             response_data = {
                 'lastModID': lastModID,
                 'fullContent': content
@@ -646,8 +662,62 @@ def handle_public_key(client_socket):
         handle_500(client_socket)
 
 
+def find_file_type(request):
+    """Determine file type and adjust request path - FIXED VERSION"""
+    logger.debug(f"Finding file type for request: {request}")
+    
+    if request == "/":
+        request = r"/home_page.html"
+        file_type = "text/html"
+    elif r".html" in request:
+        file_type = "text/html"
+    elif r"/js" in request:
+        file_type = "application/javascript"  # Fixed: was "text/js"
+    elif r"/css" in request:
+        file_type = "text/css"
+    elif r"/imgs" in request:
+        # Fixed: Better handling of image file types
+        if request.endswith('.ico'):
+            file_type = "image/x-icon"  # Correct MIME type for .ico files
+        elif request.endswith('.png'):
+            file_type = "image/png"
+        elif request.endswith('.jpg') or request.endswith('.jpeg'):
+            file_type = "image/jpeg"
+        elif request.endswith('.gif'):
+            file_type = "image/gif"
+        elif request.endswith('.webp'):
+            file_type = "image/webp"
+        elif request.endswith('.svg'):
+            file_type = "image/svg+xml"
+        else:
+            # Fallback for unknown image types
+            index_dot = request.rfind(".") + 1  # Use rfind to get last dot
+            extension = request[index_dot:].lower()
+            file_type = f"image/{extension}"
+    else:
+        # Handle other file types
+        index_dot = request.rfind(".") + 1  # Use rfind to get last dot
+        if index_dot > 0:
+            extension = request[index_dot:].lower()
+            # Map common extensions to correct MIME types
+            mime_map = {
+                'css': 'text/css',
+                'js': 'application/javascript',
+                'json': 'application/json',
+                'txt': 'text/plain',
+                'md': 'text/markdown',
+                'xml': 'application/xml'
+            }
+            file_type = mime_map.get(extension, f"text/{extension}")
+        else:
+            file_type = "text/plain"
+    
+    logger.debug(f"Determined file type: {file_type} for request: {request}")
+    return request, file_type
+
+
 def handle_static_files(client_socket, request, PATH_TO_FOLDER, FORBIDDEN):
-    """Handle static file requests (images, HTML, etc.)"""
+    """Handle static file requests (images, HTML, etc.) - FIXED VERSION"""
     logger.debug(f"Handling static file request: {request}")
     
     if file_forbidden(PATH_TO_FOLDER + request, FORBIDDEN):
@@ -658,49 +728,66 @@ def handle_static_files(client_socket, request, PATH_TO_FOLDER, FORBIDDEN):
         handle_404(client_socket)
     else:
         request, file_type = find_file_type(request)
-        logger.info(f"Serving file: {request}")
+        logger.info(f"Serving file: {request}, type: {file_type}")  # Fixed: show file_type
 
         if "imgs/" in request:
-            with open(PATH_TO_FOLDER + request, "rb") as file3:
-                photo = file3.read()
-            response = ready_to_send("200 OK", photo, file_type)
-            client_socket.send(response.encode() + photo)
+            try:
+                with open(PATH_TO_FOLDER + request, "rb") as file3:
+                    photo = file3.read()
+                
+                # Fixed: Create proper HTTP response for binary files
+                #headers += f"Cache-Control: public, max-age=31536000\r\n"  # Cache for 1 year
+               
+                response = ready_to_send("200 ok",photo,file_type).encode('utf-8') + photo
+                client_socket.send(response)
+                
+            except Exception as e:
+                logger.error(f"Error serving image file {request}: {e}")
+                handle_500(client_socket)
         else:
-            with open(PATH_TO_FOLDER + request, "r") as file2:
-                code = file2.read()
-                response = ready_to_send("200 OK", code, file_type)
-                client_socket.send(response.encode())
+            try:
+                with open(PATH_TO_FOLDER + request, "r", encoding='utf-8') as file2:
+                    code = file2.read()
+                
+                # Create proper HTTP response for text filesr
+                
+                response = ready_to_send("200 ok",code,file_type) + code
+                client_socket.send(response.encode('utf-8'))
+                
+            except Exception as e:
+                logger.error(f"Error serving text file {request}: {e}")
+                handle_500(client_socket)
 
 
 def handle_get_requests(client_socket, request, headers_data, PATH_TO_FOLDER, FORBIDDEN):
     """Handle all GET requests"""
-    logger.debug(f"Processing GET request: {request}")
-    
     if "/poll-updates" in request:
         handle_poll_updates(client_socket, headers_data)
-    elif "/save" in request:
-        handle_save_request(client_socket, headers_data, request, PATH_TO_FOLDER)
-    elif "/get-file-details" in request:
-        handle_file_details(client_socket, headers_data)
-    elif "/get-user-files" in request:
-        handle_user_files(client_socket, headers_data)
-    elif "/get-version-details" in request:
-        handle_version_details(client_socket, headers_data)
-    elif "/show-version" in request:
-        handle_show_version(client_socket, headers_data)
-    elif "/check-viewer-status" in request:
-        handle_viewer_status(client_socket, headers_data)
-    elif "/new-file" in request:
-        handle_new_file_request(client_socket, headers_data, PATH_TO_FOLDER)
-    elif "/load" in request:
-        handle_load_file(client_socket, headers_data, PATH_TO_FOLDER)
-    elif "/get-public-key" in request:
-        handle_public_key(client_socket)
-    elif "imgs/" in request or request == "//" or "." in request or "/" == request:
-        handle_static_files(client_socket, request, PATH_TO_FOLDER, FORBIDDEN)
     else:
-        logger.warning(f"Unknown GET request: {request}")
-        handle_500(client_socket)
+        logger.debug(f"Processing GET request: {request}")
+        if "/save" in request:
+            handle_save_request(client_socket, headers_data, request, PATH_TO_FOLDER)
+        elif "/get-file-details" in request:
+            handle_file_details(client_socket, headers_data)
+        elif "/get-user-files" in request:
+            handle_user_files(client_socket, headers_data)
+        elif "/get-version-details" in request:
+            handle_version_details(client_socket, headers_data)
+        elif "/show-version" in request:
+            handle_show_version(client_socket, headers_data)
+        elif "/check-viewer-status" in request:
+            handle_viewer_status(client_socket, headers_data)
+        elif "/new-file" in request:
+            handle_new_file_request(client_socket, headers_data, PATH_TO_FOLDER)
+        elif "/load" in request:
+            handle_load_file(client_socket, headers_data, PATH_TO_FOLDER)
+        elif "/get-public-key" in request:
+            handle_public_key(client_socket)
+        elif "imgs/" in request or request == "//" or "." in request or "/" == request:
+            handle_static_files(client_socket, request, PATH_TO_FOLDER, FORBIDDEN)
+        else:
+            logger.warning(f"Unknown GET request: {request}")
+            handle_500(client_socket)
 
 
 # POST request handlers
@@ -808,18 +895,35 @@ def handle_user_permissions(client_socket, content_length, headers_data, request
 
 
 def handle_save_version(client_socket, content_length):
-    """Handle save new version requests"""
+    """Handle save new version request"""
     logger.info("Handling save new version request")
-    
-    body = client_socket.recv(content_length).decode()
-    data = json.loads(body)
-    fileID = data.get('fileID')
-    userID = data.get('userID')
-    content = data.get('content')
-    
-    logger.info(f"Saving new version for file {fileID} by user {userID}")
-    response = version_log_db.add_version(int(fileID), content)
-    client_socket.send(ready_to_send(response['status'], json.dumps(response['message']), "application/json").encode())
+    try:
+        content = get_content_of_upload(client_socket, content_length)
+        if not content:
+            raise ValueError("No content received")
+            
+        data = json.loads(content)
+        file_id = data.get('fileID')
+        user_id = data.get('userID')
+        content = data.get('content')
+        
+        if not all([file_id, user_id, content]):
+            raise ValueError("Missing required parameters")
+            
+        if file_permissions_db.is_viewer(file_id, user_id):
+            logger.warning(f"User {user_id} is a viewer and cannot save new versions")
+            response = ready_to_send("403 Forbidden", json.dumps({"error": "Viewers cannot save new versions"}), "application/json")
+            client_socket.send(response.encode())
+            return
+            
+        save_new_version(file_id, user_id, content, client_socket)
+    except ValueError as e:
+        logger.error(f"Error in save version request: {str(e)}")
+        response = ready_to_send("400 Bad Request", json.dumps({"error": str(e)}), "application/json")
+        client_socket.send(response.encode())
+    except Exception as e:
+        logger.error(f"Unexpected error in save version request: {str(e)}")
+        handle_500(client_socket)
 
 
 def handle_upload_file(client_socket, content_length, headers_data, PATH_TO_FOLDER):
@@ -873,24 +977,27 @@ def handle_post_requests(client_socket, request, headers_data, PATH_TO_FOLDER):
 
 # DELETE request handlers
 def handle_delete_version(client_socket, headers_data):
-    """Handle delete version requests"""
-    logger.info("Handling delete version request")
-    
-    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
-    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)', "userID")
-    version = get_header(client_socket, headers_data, r'version:\s*(\d+)', "version")
-
-    if not file_id or not user_id or not version:
-        logger.error("Missing parameters for delete version request")
-        return
-    
-    if not file_db.is_owner(int(file_id), int(user_id)):
-        logger.error(f"User {user_id} is not owner of file {file_id}")
-        client_socket.send(ready_to_send("500 Internal Server Error", "Not owner!!", "text/plain").encode())
-    else:
-        logger.info(f"Deleting version {version} of file {file_id}")
-        result = version_log_db.delete_version(version, file_id)
-        client_socket.send(ready_to_send(result['status'], result["message"], "text/plain").encode())
+    """Handle version deletion request"""
+    logger.info("Handling version deletion request")
+    try:
+        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\S+)', "fileID")
+        user_id = get_header(client_socket, headers_data, r'userID:\s*(\S+)', "userID")
+        version = get_header(client_socket, headers_data, r'version:\s*(\S+)', "version")
+        
+        if file_permissions_db.is_viewer(file_id, user_id):
+            logger.warning(f"User {user_id} is a viewer and cannot delete versions")
+            response = ready_to_send("403 Forbidden", json.dumps({"error": "Viewers cannot delete versions"}), "application/json")
+            client_socket.send(response.encode())
+            return
+            
+        delete_version(file_id, user_id, version, client_socket)
+    except ValueError as e:
+        logger.error(f"Error in delete version request: {str(e)}")
+        response = ready_to_send("400 Bad Request", json.dumps({"error": str(e)}), "application/json")
+        client_socket.send(response.encode())
+    except Exception as e:
+        logger.error(f"Unexpected error in delete version request: {str(e)}")
+        handle_500(client_socket)
 
 
 def handle_delete_file(client_socket, headers_data, PATH_TO_FOLDER):
@@ -963,7 +1070,6 @@ def handle_client(client_socket, client_address, num_thread):
 
     client_ip = client_address[0]
     client_port = client_address[1]
-    logger.info(f"New client connection from {client_ip}:{client_port} (Thread #{num_thread})")
 
     try:
         try:
@@ -1007,7 +1113,7 @@ def handle_client(client_socket, client_address, num_thread):
 
     finally:
         client_socket.close()
-        if "/poll-updates" not in locals() or "/poll-updates" not in request:
+        if "/poll-updates" not in request:
             logger.info(f"Connection closed: {client_ip}")
 
 
@@ -1031,8 +1137,6 @@ def start_main_server(host='127.0.0.1', port=8000):
             client_socket, client_address = server_socket.accept()
             num_thread += 1
             
-            logger.debug(f"New connection from {client_address} - Thread {num_thread}")
-            
             # Create a new thread to handle the client
             client_thread = threading.Thread(
                 target=handle_client, 
@@ -1043,6 +1147,42 @@ def start_main_server(host='127.0.0.1', port=8000):
 
         except Exception as e:
             logger.error(f"Error accepting connection: {str(e)}")
+
+def save_new_version(file_id, user_id, content, client_socket):
+    """Save a new version of a file"""
+    logger.info(f"Saving new version for file {file_id} by user {user_id}")
+    
+    if not file_id or not user_id or not content:
+        logger.error("Missing required parameters: file_id, user_id, or content")
+        raise ValueError("File ID, User ID or Content not provided")
+    elif file_permissions_db.is_viewer(file_id, user_id):
+        logger.warning(f"User {user_id} is a viewer and cannot save new versions")
+        raise ValueError("Viewers cannot save new versions")
+    elif not file_permissions_db.is_editor_or_owner(file_id, user_id):
+        logger.warning(f"User {user_id} does not have permission to save versions")
+        raise ValueError("User does not have permission to save versions")
+    
+    result = version_log_db.add_version(file_id, content)
+    response = ready_to_send(result['status'], json.dumps(result['message']), "application/json")
+    client_socket.send(response.encode())
+
+def delete_version(file_id, user_id, version, client_socket):
+    """Delete a specific version of a file"""
+    logger.info(f"Deleting version {version} of file {file_id} for user {user_id}")
+    
+    if not file_id or not user_id or not version:
+        logger.error("Missing required parameters: file_id, user_id, or version")
+        raise ValueError("File ID, User ID or Version not provided")
+    elif file_permissions_db.is_viewer(file_id, user_id):
+        logger.warning(f"User {user_id} is a viewer and cannot delete versions")
+        raise ValueError("Viewers cannot delete versions")
+    elif not file_permissions_db.is_editor_or_owner(file_id, user_id):
+        logger.warning(f"User {user_id} does not have permission to delete versions")
+        raise ValueError("User does not have permission to delete versions")
+    
+    result = version_log_db.delete_version(version, file_id)
+    response = ready_to_send(result['status'], json.dumps(result['message']), "application/json")
+    client_socket.send(response.encode())
 
 if __name__ == "__main__":
     start_main_server()
