@@ -932,7 +932,8 @@ def handle_upload_file(client_socket, content_length, headers_data, PATH_TO_FOLD
     
     content = get_content_of_upload(client_socket, content_length)
     if content:
-        new_file(client_socket, PATH_TO_FOLDER, headers_data, content)
+        content = json.loads(content)
+        new_file(client_socket, PATH_TO_FOLDER, headers_data, content['content'])
     else:
         logger.error("No content received for file upload")
         client_socket.send(ready_to_send("400 Bad Request", "Broken pipe or No content").encode())

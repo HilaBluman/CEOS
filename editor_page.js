@@ -92,6 +92,16 @@ class ClientEncryption {
     isEncryptionAvailable() {
         return this.encryptionMode === 'rsa' && this.isReady;
     }
+
+    encryptDataAES(data,key) {
+        const encryptedData = CryptoJS.AES.encrypt(data, key).toString();
+        return encryptedData;
+    }
+
+    decryptDataAES(encryptedData,key) {
+        const decryptedData = CryptoJS.AES.decrypt(encryptedData, key).toString(CryptoJS.enc.Utf8);
+        return decryptedData;
+    }
 }
 
 // Global RSA instance
@@ -883,6 +893,12 @@ async function uploadNewFile(fileContent, filename) {
         
         let headers = { 'Content-Type': 'application/json' };
         let body = {};
+
+        // Check if the file extension is allowed
+        const fileExtension = filename.split('.').pop();
+        if (!languageMap[fileExtension]) {
+            throw new Error(`File extension ${fileExtension} is not allowed.`);
+        }
         
         if (clientRSA && clientRSA.isEncryptionAvailable()) {
             console.log('🔒 Uploading file with RSA encryption...');
