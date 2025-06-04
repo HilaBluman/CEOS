@@ -189,7 +189,7 @@
                     <input type="text" id="login-username" placeholder="Username" required>
                     <input type="password" id="login-password" placeholder="Password" required>
                     <button type="submit" class="auth-btn" id="login-btn">Log in</button>
-                    <div class="encryption-status">🔒 Your credentials are encrypted before transmission</div>
+                    <div id="encryption-status" class="encryption-status">Establishing Security...</div>
                 </form>
                 
                 <!-- Sign-Up Form -->
@@ -197,7 +197,7 @@
                     <input type="text" id="signup-username" placeholder="Username" required>
                     <input type="password" id="signup-password" placeholder="Password" required>
                     <button type="submit" class="auth-btn" id="signup-btn">Create Account</button>
-                    <div class="encryption-status">🔒 Your credentials are encrypted before transmission</div>
+                    <div id="encryption-status1" class="encryption-status">Establishing Security...</div>
                 </form>
             </div>
         </div>
@@ -208,8 +208,21 @@
     <script>
         class ClientEncryption {
             constructor() {
-                this.jsencrypt = new JSEncrypt();
-                this.isReady = false;
+                this.cryptServer = new JSEncrypt();
+                this.isReadyServer = false;
+                this.isReadyClient = false;
+                this.cryptClient = new JSEncrypt({default_key_size: 1024});
+
+                // Generate keys
+                this.cryptClient.getKey();
+
+                // Store keys as public properties
+                this.publicKey = this.cryptClient.getPublicKey();
+                this.privateKey = this.cryptClient.getPrivateKey();
+                this.cryptClient.setPublicKey(this.publicKey);
+                this.cryptClient.setPrivateKey(this.privateKey);
+
+                this.isReadyClient = true;
             }
 
             async getPublicKey() {
@@ -217,7 +230,7 @@
                     const response = await fetch('/get-public-key', {
                         method: 'GET',
                         headers: {
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/json',
                         }
                     });
 
@@ -229,8 +242,8 @@
                     
                     // Convert base64 to PEM format that JSEncrypt expects
                     const pemKey = this.base64ToPem(data.publicKey);
-                    this.jsencrypt.setPublicKey(pemKey);
-                    this.isReady = true;
+                    this.cryptServer.setPublicKey(pemKey);
+                    this.isReadyServer = true;
                     
                     console.log('Public key obtained and set successfully');
                     return true;
@@ -250,16 +263,25 @@
                 return pemHeader + formatted + pemFooter;
             }
 
-            encrypt(text) {
-                if (!this.isReady) {
-                    throw new Error('Public key not loaded. Call getPublicKey() first.');
-                }
+            encryptRSA(text) {
+                if (!this.isReadyServer) { throw new Error('Public server key not loaded. Call getPublicKey() first.'); }
+                if (text == null || text === '') throw new Error("Data to encrypt cannot be null or empty");
 
-                const encrypted = this.jsencrypt.encrypt(text);
-                if (!encrypted) {
-                    throw new Error('Encryption failed');
-                }
+                const encrypted = this.cryptServer.encrypt(text);
+                if (!encrypted) { throw new Error('Encryption failed'); }
+
                 return encrypted;
+            }
+
+
+            decryptRSA(encrypted) {
+                if (!this.isReadyClient) {throw new Error('Public client key not loaded. Call getPublicKey() first.');}
+                if (encrypted == null || encrypted === '') throw new Error("Encrypted data cannot be null or empty");
+                console.log("encrypted: " + encrypted)
+                const decrypted = this.cryptClient.decrypt(encrypted);
+                console.log("decrypted: " + decrypted)
+                if (decrypted === null) {throw new Error('Decryption failed.');}
+                return decrypted;
             }
         }
 
@@ -268,20 +290,27 @@
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', async () => {
-            const securityStatus = document.getElementById('security-status');
+            const encryptionStatus = document.getElementById('encryption-status');
+            const encryptionStatus1 = document.getElementById('encryption-status1');
+
             
             try {
                 const success = await clientRSA.getPublicKey();
+                
                 if (success) {
-                    securityStatus.textContent = 'Secure Connection Established';
-                    securityStatus.style.color = '#4CAF50';
+                    encryptionStatus.textContent = '🔒 Secure Connection Established';
+                    encryptionStatus.style.color = '#d495fe';
+                    encryptionStatus1.textContent = '🔒 Secure Connection Established';
+                    encryptionStatus1.style.color = '#d495fe';
                 } else {
-                    securityStatus.textContent = 'Security Warning: Insecure Connection';
-                    securityStatus.style.color = '#FF4C4C';
+                    encryptionStatus.textContent = '🔓 Security Warning: Insecure Connection';
+                    encryptionStatus.style.color = '#FF4C4C';
+                    encryptionStatus1.textContent = '🔓 Security Warning: Insecure Connection';
+                    encryptionStatus1.style.color = '#FF4C4C';
                 }
             } catch (error) {
-                securityStatus.textContent = 'Security Error';
-                securityStatus.style.color = '#FF4C4C';
+                encryptionStatus.textContent = 'Security Error';
+                encryptionStatus.style.color = '#FF4C4C';
                 console.error('Security initialization error:', error);
             }
         });
@@ -315,7 +344,7 @@
             const password = document.getElementById('login-password').value;
             const loginBtn = document.getElementById('login-btn');
 
-            if (!clientRSA.isReady) {
+            if (!clientRSA.isReadyServer || !clientRSA.isReadyClient) {
                 showNotification('Security system not ready. Please wait and try again.', 'error');
                 return;
             }
@@ -325,8 +354,8 @@
                 loginBtn.classList.add('loading');
                 loginBtn.textContent = 'Encrypting...';
 
-                const encryptedUsername = clientRSA.encrypt(username);
-                const encryptedPassword = clientRSA.encrypt(password);
+                const encryptedUsername = clientRSA.encryptRSA(username);
+                const encryptedPassword = clientRSA.encryptRSA(password);
 
                 loginBtn.textContent = 'Logging in...';
 
@@ -338,6 +367,7 @@
                     body: JSON.stringify({ 
                         username: encryptedUsername,
                         password: encryptedPassword,
+                        public_key_client: clientRSA.publicKey,
                         encrypted: true
                     }),
                 });
@@ -347,10 +377,11 @@
                 if (response.ok) {
                     showNotification('Log in successful! Welcome back!', 'success');
                     console.log('Log in successful:', data);
-
+                    
+                    const userId  = clientRSA.decryptRSA(data.userId)
                     sessionStorage.setItem('username', username);
-                    sessionStorage.setItem('password', password);
-                    sessionStorage.setItem('userId', data.userId); 
+                    sessionStorage.setItem('password', password); //i dont think this so be sessionStorage
+                    sessionStorage.setItem('userId', userId); 
                     
                     setTimeout(() => {
                         window.location.href = '/editor_page.html';
@@ -374,7 +405,7 @@
             const password = document.getElementById('signup-password').value;
             const signupBtn = document.getElementById('signup-btn');
 
-            if (!clientRSA.isReady) {
+            if (!clientRSA.isReadyServer || !clientRSA.isReadyClient) {
                 showNotification('Security system not ready. Please wait and try again.', 'error');
                 return;
             }
@@ -384,8 +415,8 @@
                 signupBtn.classList.add('loading');
                 signupBtn.textContent = 'Encrypting...';
 
-                const encryptedUsername = clientRSA.encrypt(username);
-                const encryptedPassword = clientRSA.encrypt(password);
+                const encryptedUsername = clientRSA.encryptRSA(username);
+                const encryptedPassword = clientRSA.encryptRSA(password);
 
                 signupBtn.textContent = 'Creating Account...';
 
@@ -397,6 +428,7 @@
                     body: JSON.stringify({ 
                         username: encryptedUsername,
                         password: encryptedPassword,
+                        public_key_client: clientRSA.publicKey,
                         encrypted: true
                     }),
                 });

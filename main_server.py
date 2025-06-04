@@ -503,10 +503,7 @@ def handle_user_files(client_socket, headers_data):
     
     try:
 
-        user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)', "userId")
-        if user_id:
-            logger.info(f"Found user ID using pattern userId: {user_id}")
-                
+        user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)', "userId")    
         decrypted_user_id = rsa_manager.decrypt(user_id)
 
         if not decrypted_user_id:
@@ -767,19 +764,19 @@ def handle_get_requests(client_socket, request, headers_data, PATH_TO_FOLDER, FO
         logger.debug(f"Processing GET request: {request}")
         if "/save" in request:
             handle_save_request(client_socket, headers_data, request, PATH_TO_FOLDER)
-        elif "/get-file-details" in request:
+        elif "/get-file-details" in request:  
             handle_file_details(client_socket, headers_data)
-        elif "/get-user-files" in request:
+        elif "/get-user-files" in request:  #rsa
             handle_user_files(client_socket, headers_data)
         elif "/get-version-details" in request:
             handle_version_details(client_socket, headers_data)
         elif "/show-version" in request:
             handle_show_version(client_socket, headers_data)
-        elif "/check-viewer-status" in request:
+        elif "/check-viewer-status" in request: #rsa?
             handle_viewer_status(client_socket, headers_data)
-        elif "/new-file" in request:
+        elif "/new-file" in request:    #rsa
             handle_new_file_request(client_socket, headers_data, PATH_TO_FOLDER)
-        elif "/load" in request:
+        elif "/load" in request:    #rsa
             handle_load_file(client_socket, headers_data, PATH_TO_FOLDER)
         elif "/get-public-key" in request:
             handle_public_key(client_socket)
@@ -791,10 +788,10 @@ def handle_get_requests(client_socket, request, headers_data, PATH_TO_FOLDER, FO
 
 
 # POST request handlers
-def handle_login(client_socket, content_length):
+def handle_login(client_socket, content_length,headers_data):
     """Handle login requests"""
     logger.info("Handling login request")
-    
+
     body = client_socket.recv(content_length).decode()
     data = json.loads(body)
     
@@ -818,8 +815,12 @@ def handle_login(client_socket, content_length):
         password = data.get('password')
     
     logger.info(f"Login attempt for username: {username}")
-    response = user_db.login(username, password)
-    
+    clientPublicRSA = data.get('public_key_client')
+    if not clientPublicRSA:
+        response = ready_to_send("404 Not Found", 'public-key-client not found', "application/json")
+        client_socket.send(response.encode())
+        return
+    response = user_db.login(username, password, clientPublicRSA)
     if response['status'] == 200:
         logger.info(f"Login successful for: {username}")
     else:
@@ -855,7 +856,12 @@ def handle_signup(client_socket, content_length):
         password = data.get('password')
     
     logger.info(f"Signup attempt for username: {username}")
-    response = user_db.signup(username, password)
+    clientPublicRSA = data.get('public_key_client')
+    if not clientPublicRSA:
+        response = ready_to_send("404 Not Found", 'public-key-client not found', "application/json")
+        client_socket.send(response.encode())
+        return
+    response = user_db.signup(username, password,clientPublicRSA)
     
     if response['status'] == 201:
         logger.info(f"User registration successful: {username}")
@@ -952,10 +958,10 @@ def handle_post_requests(client_socket, request, headers_data, PATH_TO_FOLDER):
         content_length = int(match.group(1))
         logger.debug(f"Content length: {content_length}")
         
-        if "/login" in request:
-            handle_login(client_socket, content_length)
-        elif "/signup" in request:
-            handle_signup(client_socket, content_length)
+        if "/login" in request: #rsa
+            handle_login(client_socket, content_length, headers_data) 
+        elif "/signup" in request:  #rsa
+            handle_signup(client_socket, content_length)    
         elif "/grant-user-to-file" in request or "/revoke-user-to-file" in request:
             handle_user_permissions(client_socket, content_length, headers_data, request)
         elif "/save-new-version" in request:
@@ -965,7 +971,7 @@ def handle_post_requests(client_socket, request, headers_data, PATH_TO_FOLDER):
             if content_length > 0:
                 client_socket.recv(content_length).decode()
             return
-        elif "/upload-file" in request:
+        elif "/upload-file" in request: #rsa
             handle_upload_file(client_socket, content_length, headers_data, PATH_TO_FOLDER)
         else:
             logger.warning(f"Unknown POST request: {request}")

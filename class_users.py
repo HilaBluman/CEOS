@@ -4,11 +4,13 @@ import threading
 import argon2
 import base64
 import json
+from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_v1_5
 
 class RSAManager:
     
@@ -116,7 +118,7 @@ class UserDatabase:
         finally:
             conn.close() 
 
-    def signup(self, username, password):
+    def signup(self, username, password,clientPublicRSA):
         if len(password) < 4:
             return {'status': 400, 'message': 'Password must be at least 4 characters long.'}
 
@@ -127,12 +129,17 @@ class UserDatabase:
 
         conn = self.get_db_connection()
         cursor = conn.cursor()
+
+        public_key = RSA.import_key(clientPublicRSA.encode('utf-8'))
+        cipher_rsa = PKCS1_v1_5.new(public_key)
+        user_id_encrypted = base64.b64encode(cipher_rsa.encrypt(str(userID).encode('utf-8'))).decode('utf-8')
+
         
         password_hash = self.hash_password(password)
         try:
             cursor.execute('INSERT INTO users (userID, username, password) VALUES (?, ?, ?)', (userID, username, password_hash))
             conn.commit()
-            return {'status': 201, 'message': 'User created successfully with userID: {}'.format(userID)}
+            return {'status': 201, 'message': 'User created successfully',userID :user_id_encrypted }
         except sqlite3.IntegrityError:
             return {'status': 409, 'message': 'Username already exists.'}
         except Exception as e:
@@ -140,19 +147,25 @@ class UserDatabase:
         finally:
             conn.close()
             
-    def login(self, username, password):
+    def login(self, username, password, clientPublicRSA):
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
         cursor.execute('SELECT password FROM users WHERE username = ?', (username,))
         result = cursor.fetchone()
         conn.close()
+        
+        user_id = self.get_user_id(username)
+        public_key = RSA.import_key(clientPublicRSA.encode('utf-8'))
+        cipher_rsa = PKCS1_v1_5.new(public_key)
+        user_id_encrypted = base64.b64encode(cipher_rsa.encrypt(str(user_id).encode('utf-8'))).decode('utf-8')
 
+        
         if result and self.verify_password(result['password'], password):
-            return {'status': 200, 'message': 'Login successful.', 'userId': self.get_user_id(username)}
+            return {'status': 200, 'message': 'Login successful.', 'userId': user_id_encrypted}
         else:
             return {'status': 401, 'message': 'Invalid username or password.'}
-        
+
     
         
     def get_user_id(self, username):
@@ -704,10 +717,6 @@ class VersionDatabase:
     def get_db_connection(self):
         conn = sqlite3.connect(self.db_path)
         return conn
-
-
-
-
     
 def main():
     ChangeLogDatabase("/Users/hila/CEOs/users.db").create_change_log_table()
@@ -715,9 +724,6 @@ def main():
     FileInfoDatabase("/Users/hila/CEOs/users.db").create_file_info_table()
     UserDatabase("/Users/hila/CEOs/users.db").create_user_database()
     VersionDatabase("/Users/hila/CEOs/users.db").create_version_table()
-    
-
-
     
     print("fin")
 
