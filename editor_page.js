@@ -9,6 +9,18 @@ class ClientEncryption {
         this.jsencrypt = null;
         this.isReady = false;
         this.encryptionMode = 'none'; // 'rsa', 'fallback', or 'none'
+        this.cryptClient = new JSEncrypt({default_key_size: 1024});
+
+        // Generate keys
+        this.cryptClient.getKey();
+
+        // Store keys as public properties
+        this.publicKey = this.cryptClient.getPublicKey();
+        this.privateKey = this.cryptClient.getPrivateKey();
+        console.log("set publicKey: " + this.publicKey)
+        this.cryptClient.setPublicKey(this.publicKey);
+        this.cryptClient.setPrivateKey(this.privateKey);
+        this.isReadyClient = true;
         this.initializeEncryption();
     }
 
@@ -59,34 +71,37 @@ class ClientEncryption {
                 const pemKey = this.base64ToPem(data.publicKey);
                 this.jsencrypt.setPublicKey(pemKey);
                 this.isReady = true;
-                console.log('🔑 Public key obtained and set successfully');
+                console.log('Public key obtained and set successfully');
             }
             
             return true;
         } catch (error) {
-            console.error('❌ Error getting public key:', error);
+            console.error('Error getting public key:', error);
             this.encryptionMode = 'none';
-            console.log('🔓 Falling back to no-encryption mode');
+            console.log('Falling back to no-encryption mode');
             return true; // Continue without encryption
         }
     }
 
-    encrypt(text) {
-        if (this.encryptionMode === 'none' || !this.jsencrypt || !this.isReady) {
-            return text; // Return unencrypted text
-        }
+    encryptRSA(text) {
+        if (!this.isReadyServer) { throw new Error('Public server key not loaded. Call getPublicKey() first.'); }
+        if (text == null || text === '') throw new Error("Data to encrypt cannot be null or empty");
 
-        try {
-            const encrypted = this.jsencrypt.encrypt(text);
-            if (!encrypted) {
-                console.warn('⚠️ Encryption failed - returning original text');
-                return text;
-            }
-            return encrypted;
-        } catch (error) {
-            console.warn('⚠️ Encryption error - returning original text:', error);
-            return text;
-        }
+        const encrypted = this.cryptServer.encrypt(text);
+        if (!encrypted) { throw new Error('Encryption failed'); }
+
+        return encrypted;
+    }
+
+
+    decryptRSA(encrypted) {
+        if (!this.isReadyClient) {throw new Error('Public client key not loaded. Call getPublicKey() first.');}
+        if (encrypted == null || encrypted === '') throw new Error("Encrypted data cannot be null or empty");
+        console.log("encrypted: " + encrypted)
+        const decrypted = this.cryptClient.decrypt(encrypted);
+        console.log("decrypted: " + decrypted)
+        if (decrypted === null) {throw new Error('Decryption failed.');}
+        return decrypted;
     }
 
     isEncryptionAvailable() {
@@ -310,6 +325,7 @@ let isDelete = false;
 let isViewer = false;
 let highlightedTxt = {start: -1, end: -1, selectedText: ""}
 let pollingInterval;
+let globalAES_key;
 
 let fileID = 0;     // changes after pciking a file
 let userID = 0;
@@ -390,6 +406,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Initialize RSA (will work with or without JSEncrypt)
         clientRSA = new ClientEncryption();
+        
+        // Get global AES key after RSA is initialized
+        await getGlobalAES();
         
         // Initialize Monaco Editor
         console.log('📝 Initializing Monaco Editor...');
@@ -1653,4 +1672,31 @@ function closeFilePopup() {
     isViewer = true;
     setEditorReadOnly(true);
     document.getElementById('file-popup').style.display = 'none';
+}
+
+async function getGlobalAES() {
+    try {
+        const response = await fetch('/get-global-aes', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+                public_key_client: clientRSA.publicKey,
+            }),
+        });
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        const data = await response.json();
+        // Assuming the server returns the AES key encrypted with the client's public RSA key
+        const encryptedAESKey = data.AESKey;
+        // Decrypt the AES key using the client's private RSA key
+        const decryptedAESKey = await clientRSA.decryptRSA(encryptedAESKey);
+        console.log("got global AES key: " + decryptedAESKey)
+        // Save the decrypted AES key in a global variable
+        globalAES_key = decryptedAESKey;
+    } catch (error) {
+        console.error('Failed to get global AES key:', error);
+    }
 }

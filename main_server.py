@@ -7,6 +7,7 @@ import urllib.parse
 import fcntl
 import logging
 from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase, RSAManager
+import base64
 
 # Set up logging
 logging.basicConfig(
@@ -27,6 +28,7 @@ file_db = FileInfoDatabase(DB_PATH)
 change_log_db = ChangeLogDatabase(DB_PATH)
 version_log_db = VersionDatabase(DB_PATH)
 rsa_manager = RSAManager()
+global_AES_key = rsa_manager.generateAESKey()
 
 logger.info("Database connections initialized")
 
@@ -217,7 +219,7 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
         logger.error("User ID not found in headers")
         return
                 
-    decrypted_user_id = rsa_manager.decrypt(user_id)
+    decrypted_user_id = rsa_manager.decryptRSA(user_id)
 
     if not decrypted_user_id:
         logger.error("No valid userId header found")
@@ -228,7 +230,7 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
         logger.error("Filename not found in headers")
         return
     
-    decrypted_filename = rsa_manager.decrypt(filename)
+    decrypted_filename = rsa_manager.decryptRSA(filename)
 
     if not decrypted_filename:
         logger.error("No valid userId header found")
@@ -504,7 +506,7 @@ def handle_user_files(client_socket, headers_data):
     try:
 
         user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)', "userId")    
-        decrypted_user_id = rsa_manager.decrypt(user_id)
+        decrypted_user_id = rsa_manager.decryptRSA(user_id)
 
         if not decrypted_user_id:
             logger.error("No valid userId header found")
@@ -604,7 +606,7 @@ def handle_load_file(client_socket, headers_data, PATH_TO_FOLDER):
             logger.info(f"Found user ID using pattern userId: {fileId}")
             return
                 
-        decrypted_file_id = rsa_manager.decrypt(fileId)
+        decrypted_file_id = rsa_manager.decryptRSA(fileId)
 
         if not decrypted_file_id:
             logger.error("No valid userId header found")
@@ -798,8 +800,8 @@ def handle_login(client_socket, content_length,headers_data):
     # Check if data is encrypted
     if 'encrypted' in data and data['encrypted']:
         logger.debug("Processing encrypted login credentials")
-        decrypted_username = rsa_manager.decrypt(data.get('username'))
-        decrypted_password = rsa_manager.decrypt(data.get('password'))
+        decrypted_username = rsa_manager.decryptRSA(data.get('username'))
+        decrypted_password = rsa_manager.decryptRSA(data.get('password'))
         
         if not decrypted_username or not decrypted_password:
             logger.error("Failed to decrypt login credentials")
@@ -839,8 +841,8 @@ def handle_signup(client_socket, content_length):
     # Check if data is encrypted
     if 'encrypted' in data and data['encrypted']:
         logger.debug("Processing encrypted signup credentials")
-        decrypted_username = rsa_manager.decrypt(data.get('username'))
-        decrypted_password = rsa_manager.decrypt(data.get('password'))
+        decrypted_username = rsa_manager.decryptRSA(data.get('username'))
+        decrypted_password = rsa_manager.decryptRSA(data.get('password'))
         
         if not decrypted_username or not decrypted_password:
             logger.error("Failed to decrypt signup credentials")
@@ -971,6 +973,8 @@ def handle_post_requests(client_socket, request, headers_data, PATH_TO_FOLDER):
             if content_length > 0:
                 client_socket.recv(content_length).decode()
             return
+        elif "/get-global-aes" in request:
+            handle_global_aes(client_socket, content_length)
         elif "/upload-file" in request: #rsa
             handle_upload_file(client_socket, content_length, headers_data, PATH_TO_FOLDER)
         else:
@@ -1190,6 +1194,39 @@ def delete_version(file_id, user_id, version, client_socket):
     result = version_log_db.delete_version(version, file_id)
     response = ready_to_send(result['status'], json.dumps(result['message']), "application/json")
     client_socket.send(response.encode())
+
+def handle_global_aes(client_socket, content_length):
+    """Handle global AES key requests"""
+    logger.info("Handling global AES key request")
+    
+    try:
+        # Read the request body
+        
+        body = client_socket.recv(content_length).decode()
+        data = json.loads(body)
+        
+        # Get client's public RSA key
+        client_public_key = data.get('public_key_client')
+        if not client_public_key:
+            logger.error("Client public key not provided")
+            response = ready_to_send("400 Bad Request", json.dumps({"error": "Client public key not provided"}), "application/json")
+            client_socket.send(response.encode())
+            return
+        
+        # Encrypt the AES key with client's public RSA key
+        encrypted_aes_key = rsa_manager.encryptWithClientKey(global_AES_key,client_public_key )
+        
+        # Send the encrypted AES key back to the client
+        response_data = json.dumps({"AESKey": encrypted_aes_key})
+        response = ready_to_send("200 OK", response_data, "application/json")
+        client_socket.send(response.encode())
+        
+        logger.info("Global AES key sent successfully: " + str(global_AES_key))
+        
+    except Exception as e:
+        logger.error(f"Error handling global AES key request: {str(e)}")
+        response = ready_to_send("500 Internal Server Error", json.dumps({"error": str(e)}), "application/json")
+        client_socket.send(response.encode())
 
 if __name__ == "__main__":
     start_main_server()

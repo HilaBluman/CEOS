@@ -4,6 +4,7 @@ import threading
 import argon2
 import base64
 import json
+import os
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -32,19 +33,75 @@ class RSAManager:
         )
         return base64.b64encode(public_der).decode('utf-8')
     
-    def encrypt(self, message):
+    def encryptRSA(self, message):
         if isinstance(message, str):
             message_bytes = message.encode('utf-8')
         else:
             message_bytes = message
         encrypted = self.public_key.encrypt(
             message_bytes,
-
-        padding.PKCS1v15()
+            padding.PKCS1v15()
         )
         return base64.b64encode(encrypted).decode('utf-8')
     
-    def decrypt(self, encrypted_message):
+    def encryptWithClientKey(self, message, client_public_key):
+        """Encrypt data using a client's public RSA key"""
+        try:
+            # Import the client's public key
+            public_key = RSA.import_key(client_public_key.encode('utf-8'))
+            cipher_rsa = PKCS1_v1_5.new(public_key)
+            
+            # Prepare the message
+            if isinstance(message, str):
+                message_bytes = message.encode('utf-8')
+            else:
+                message_bytes = message
+                
+            # Encrypt the message
+            encrypted = cipher_rsa.encrypt(message_bytes)
+            
+            # Return base64 encoded encrypted data
+            return base64.b64encode(encrypted).decode('utf-8')
+            
+        except Exception as e:
+            print(f"Client RSA encryption error: {e}")
+            return None
+    
+    def generateAESKey(self):
+        """Generate a new AES key and return it in base64 format"""
+        try:
+            # Generate a new AES key (32 bytes = 256 bits)
+            aes_key = os.urandom(32)
+            # Convert to base64 for easy transmission
+            aes_key_b64 = base64.b64encode(aes_key).decode('utf-8')
+            return aes_key_b64
+        except Exception as e:
+            print(f"AES key generation error: {e}")
+            return None
+    
+    def encryptAES(self,aes_key, message):
+        """Encrypt a message using RSA"""
+        try:
+            if not aes_key:
+                return None
+                
+            # Encrypt the message with RSA
+            if isinstance(message, str):
+                message_bytes = message.encode('utf-8')
+            else:
+                message_bytes = message
+                
+            encrypted = self.public_key.encrypt(
+                message_bytes,
+                padding.PKCS1v15()
+            )
+            return base64.b64encode(encrypted).decode('utf-8')
+            
+        except Exception as e:
+            print(f"AES encryption error: {e}")
+            return None
+    
+    def decryptRSA(self, encrypted_message):
         if not encrypted_message:
             return None
         try:
@@ -61,7 +118,7 @@ class RSAManager:
             return None
     
     def decrypt_json_data(self, encrypted_data):
-        decrypted_text = self.decrypt(encrypted_data)
+        decrypted_text = self.decryptRSA(encrypted_data)
         if decrypted_text:
             try:
                 return json.loads(decrypted_text)

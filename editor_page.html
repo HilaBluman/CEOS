@@ -10,10 +10,13 @@
             window.define_backup = window.define;
             window.define = undefined;
         </script>
+        <!-- Load encryption libraries first -->
         <script src="js/jsencrypt.min.js"></script>
+        <script src="js/crypto-js.min.js"></script>
         <script>
             window.define = window.define_backup;
         </script>
+        <!-- Load Monaco editor -->
         <script src="js/monaco-loader.min.js"></script>
     </head>
 
