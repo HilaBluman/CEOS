@@ -108,14 +108,87 @@ class ClientEncryption {
         return this.encryptionMode === 'rsa' && this.isReady;
     }
 
-    encryptDataAES(data,key) {
-        const encryptedData = CryptoJS.AES.encrypt(data, key).toString();
-        return encryptedData;
+    encryptDataAES(data, key) {
+        try {
+            console.log('🔒 AES Encryption Debug:');
+            console.log('- Data to encrypt:', data);
+            console.log('- Key (base64):', key);
+            
+            // Convert key from base64 to WordArray
+            const keyBytes = CryptoJS.enc.Base64.parse(key);
+            console.log('- Key bytes length:', keyBytes.words.length * 4, 'bytes');
+            
+            // Generate random IV
+            const iv = CryptoJS.lib.WordArray.random(16); // 16 bytes = 128 bits
+            console.log('- Generated IV:', CryptoJS.enc.Base64.stringify(iv));
+            
+            // Encrypt the data
+            const encrypted = CryptoJS.AES.encrypt(data, keyBytes, {
+                iv: iv,
+                mode: CryptoJS.mode.CBC,
+                padding: CryptoJS.pad.Pkcs7
+            });
+            
+            console.log('- Encrypted ciphertext:', CryptoJS.enc.Base64.stringify(encrypted.ciphertext));
+            
+            // Combine IV + encrypted data and return as base64
+            const combined = iv.concat(encrypted.ciphertext);
+            const result = CryptoJS.enc.Base64.stringify(combined);
+            
+            console.log('- Final combined result:', result);
+            console.log('- Combined length:', result.length);
+            
+            return result;
+            
+        } catch (error) {
+            console.error('❌ Error encrypting with AES:', error);
+            return null;
+        }
     }
-
-    decryptDataAES(encryptedData,key) {
-        const decryptedData = CryptoJS.AES.decrypt(encryptedData, key).toString(CryptoJS.enc.Utf8);
-        return decryptedData;
+    
+    decryptDataAES(encryptedData, key) {
+        try {
+            console.log('🔓 AES Decryption Debug:');
+            console.log('- Encrypted data:', encryptedData);
+            console.log('- Key (base64):', key);
+            
+            // Convert key from base64 to WordArray
+            const keyBytes = CryptoJS.enc.Base64.parse(key);
+            console.log('- Key bytes length:', keyBytes.words.length * 4, 'bytes');
+            
+            // Parse the combined data
+            const combined = CryptoJS.enc.Base64.parse(encryptedData);
+            console.log('- Combined data length:', combined.words.length * 4, 'bytes');
+            
+            // Extract IV (first 16 bytes) and ciphertext (rest)
+            const iv = CryptoJS.lib.WordArray.create(combined.words.slice(0, 4)); // 4 words = 16 bytes
+            const ciphertext = CryptoJS.lib.WordArray.create(combined.words.slice(4));
+            
+            console.log('- Extracted IV:', CryptoJS.enc.Base64.stringify(iv));
+            console.log('- Extracted ciphertext length:', ciphertext.words.length * 4, 'bytes');
+            
+            // Create cipherParams object for decryption
+            const cipherParams = CryptoJS.lib.CipherParams.create({
+                ciphertext: ciphertext
+            });
+            
+            // Decrypt the data
+            const decrypted = CryptoJS.AES.decrypt(cipherParams, keyBytes, {
+                iv: iv,
+                mode: CryptoJS.mode.CBC,
+                padding: CryptoJS.pad.Pkcs7
+            });
+            
+            // Convert to UTF-8 string
+            const result = decrypted.toString(CryptoJS.enc.Utf8);
+            console.log('- Decrypted result:', result);
+            
+            return result;
+            
+        } catch (error) {
+            console.error('❌ Error decrypting with AES:', error);
+            return null;
+        }
     }
 }
 
@@ -670,9 +743,9 @@ async function loadFile(fileId) {
         
         let headers = { 'Connection': 'keep-alive' };
         
-        if (clientRSA && clientRSA.isEncryptionAvailable()) {
-            console.log('🔒 Loading file with RSA encryption...');
-            const encryptedFileId = clientRSA.encrypt(fileId.toString());
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Loading file with AES encryption...');
+            const encryptedFileId = clientRSA.encryptDataAES(fileId.toString(), globalAES_key);
             headers['fileId'] = encryptedFileId;
             headers['encrypted'] = 'true';
         } else {
@@ -694,7 +767,14 @@ async function loadFile(fileId) {
             Loadeing = true;
             lastModID = data.lastModID;
             console.log("lastModID: " + lastModID);
-            codeEditor.setValue(data.fullContent);
+            
+            // Decrypt content if it's encrypted
+            let content = data.fullContent;
+            if (data.encrypted && globalAES_key) {
+                content = clientRSA.decryptDataAES(content, globalAES_key);
+            }
+            
+            codeEditor.setValue(content);
             console.log('✅ File loaded successfully');
             startPolling();
         }
@@ -754,12 +834,13 @@ async function getUserFiles(userId) {
         console.log(`👤 Getting files for user ${userId}...`);
         
         let headers = {};
-        
-        if (clientRSA && clientRSA.isEncryptionAvailable()) {
-            console.log('🔒 Getting user files with RSA encryption...');
-            const encryptedUserId = clientRSA.encrypt(userId.toString());
+
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Getting user files with AES encryption...');
+            const encryptedUserId = clientRSA.encryptDataAES(userId.toString(), globalAES_key);
             headers['userId'] = encryptedUserId;
             headers['encrypted'] = 'true';
+            console.log(headers)
         } else {
             console.log('🔓 Getting user files without encryption...');
             headers['userId'] = userId.toString();
@@ -854,11 +935,12 @@ async function createNewFile(filename) {
         console.log(`📝 Creating new file: ${filename}`);
         
         let headers = {};
+        let body = {};
         
-        if (clientRSA && clientRSA.isEncryptionAvailable()) {
-            console.log('🔒 Creating new file with RSA encryption...');
-            headers['userId'] = clientRSA.encrypt(userID.toString());
-            headers['filename'] = clientRSA.encrypt(filename);
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Creating new file with AES encryption...');
+            headers['userId'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
+            headers['filename'] = clientRSA.encryptDataAES(filename, globalAES_key);
             headers['encrypted'] = 'true';
         } else {
             console.log('🔓 Creating new file without encryption...');
@@ -895,7 +977,6 @@ async function createNewFile(filename) {
         document.getElementById('file-popup').style.display = 'none';
 
         await selectFile(data.fileId, filename);
-        //await loadFile(data.fileId);
         console.log('✅ New file created successfully');
         showNotification('File created successfully!', 'success');
 
@@ -919,13 +1000,13 @@ async function uploadNewFile(fileContent, filename) {
             throw new Error(`File extension ${fileExtension} is not allowed.`);
         }
         
-        if (clientRSA && clientRSA.isEncryptionAvailable()) {
-            console.log('🔒 Uploading file with RSA encryption...');
-            headers['filename'] = clientRSA.encrypt(filename);
-            headers['userId'] = clientRSA.encrypt(userID.toString());
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Uploading file with AES encryption...');
+            headers['filename'] = clientRSA.encryptDataAES(filename, globalAES_key);
+            headers['userId'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
             headers['encrypted'] = 'true';
             body = {
-                content: clientRSA.encrypt(fileContent),
+                content: clientRSA.encryptDataAES(fileContent, globalAES_key),
                 encrypted: true
             };
         } else {

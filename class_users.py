@@ -11,38 +11,143 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_v1_5
+from Crypto.Cipher import PKCS1_v1_5, AES
+from Crypto.Util.Padding import pad, unpad
+from typing import Optional, Union, Any, cast, Dict
 
 class RSAManager:
     
-    def __init__(self):
-        print("Generating RSA keys in memory...")
-        private_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-            backend=default_backend()
-        )
-        self.private_key = private_key
-        self.public_key = private_key.public_key()
-        print("RSA keys ready!")
+    def __init__(self) -> None:
+        try:
+            key = RSA.generate(1024)
+            self.private_key: Optional[RSA.RsaKey] = key
+            self.public_key: Optional[RSA.RsaKey] = key.publickey()
+        except Exception as e:
+            print(f"Error generating RSA keys: {str(e)}")
+            self.private_key = None
+            self.public_key = None
+
+    def get_public_key(self) -> Optional[str]:
+        """Get public key in PEM format"""
+        try:
+            if not self.public_key:
+                raise ValueError("Public key not initialized")
+            return self.public_key.export_key().decode('utf-8')
+        except Exception as e:
+            print(f"Error getting public key: {str(e)}")
+            return None
+
+    def encryptRSA(self, message: Union[str, bytes]) -> Optional[str]:
+        """Encrypt message using RSA"""
+        try:
+            if not self.public_key:
+                raise ValueError("Public key not initialized")
+            if isinstance(message, str):
+                message = message.encode('utf-8')
+            cipher = PKCS1_v1_5.new(self.public_key)
+            encrypted = cipher.encrypt(message)
+            return base64.b64encode(encrypted).decode('utf-8')
+        except Exception as e:
+            print(f"Error encrypting with RSA: {str(e)}")
+            return None
+
+    def decryptRSA(self, encrypted: str) -> Optional[str]:
+        """Decrypt message using RSA"""
+        try:
+            if not self.private_key:
+                raise ValueError("Private key not initialized")
+            encrypted_bytes = base64.b64decode(encrypted)
+            cipher = PKCS1_v1_5.new(self.private_key)
+            decrypted = cipher.decrypt(encrypted_bytes, sentinel=None)
+            if not decrypted:
+                return None
+            return decrypted.decode('utf-8')
+        except Exception as e:
+            print(f"Error decrypting with RSA: {str(e)}")
+            return None
+
+    def generateAESKey(self) -> Optional[str]:
+        """Generate a new AES key"""
+        try:
+            key = os.urandom(32)  # 256 bits
+            return base64.b64encode(key).decode('utf-8')
+        except Exception as e:
+            print(f"Error generating AES key: {str(e)}")
+            return None
+
+    def encryptAES(self, message: Union[str, bytes], aes_key: str) -> Optional[str]:
+        """Encrypt message using AES"""
+        try:
+            if isinstance(message, str):
+                message = message.encode('utf-8')
+            key_bytes = base64.b64decode(aes_key)
+            # Generate a random IV
+            iv = os.urandom(AES.block_size)
+            cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
+            # Pad the message
+            padded_data = pad(message, AES.block_size)
+            # Encrypt the padded data
+            encrypted = cipher.encrypt(padded_data)
+            # Combine IV and encrypted data
+            combined = iv + encrypted
+            # Return base64 encoded result
+            return base64.b64encode(combined).decode('utf-8')
+        except Exception as e:
+            print(f"Error encrypting with AES: {str(e)}")
+            return None
+
+    def decryptAES(self, encrypted: str, aes_key: str) -> Optional[str]:
+        """Decrypt message using AES"""
+        try:
+            print(f"🔓 Server AES Decryption Debug:")
+            print(f"- Encrypted data length: {len(encrypted)}")
+            print(f"- Encrypted data (first 50 chars): {encrypted[:50]}...")
+            print(f"- AES key length: {len(aes_key)}")
+            
+            if not aes_key:
+                raise ValueError("AES key not provided")
+                
+            # Decode the base64 input
+            encrypted_bytes = base64.b64decode(encrypted)
+            print(f"- Decoded bytes length: {len(encrypted_bytes)}")
+            
+            key_bytes = base64.b64decode(aes_key)
+            print(f"- Key bytes length: {len(key_bytes)}")
+            
+            # Extract IV and ciphertext
+            iv = encrypted_bytes[:AES.block_size]
+            ciphertext = encrypted_bytes[AES.block_size:]
+            
+            print(f"- IV length: {len(iv)} bytes")
+            print(f"- Ciphertext length: {len(ciphertext)} bytes")
+            print(f"- Expected IV length: {AES.block_size} bytes")
+            
+            # Create cipher and decrypt
+            cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
+            decrypted = cipher.decrypt(ciphertext)
+            
+            print(f"- Decrypted bytes length: {len(decrypted)}")
+            
+            # Unpad the decrypted data
+            try:
+                unpadded_data = unpad(decrypted, AES.block_size)
+                result = unpadded_data.decode('utf-8')
+                print(f"- Final decrypted result: {result}")
+                return result
+            except ValueError as e:
+                print(f"❌ Padding error: {str(e)}")
+                print(f"- Decrypted bytes (hex): {decrypted.hex()}")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Error decrypting with AES: {str(e)}")
+            return None
 
     def get_public_key_string(self):
-        public_der = self.public_key.public_bytes(
-            encoding=serialization.Encoding.DER,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        )
-        return base64.b64encode(public_der).decode('utf-8')
-    
-    def encryptRSA(self, message):
-        if isinstance(message, str):
-            message_bytes = message.encode('utf-8')
-        else:
-            message_bytes = message
-        encrypted = self.public_key.encrypt(
-            message_bytes,
-            padding.PKCS1v15()
-        )
-        return base64.b64encode(encrypted).decode('utf-8')
+        if not self.public_key:
+            raise ValueError("Public key not initialized")
+        public_pem = self.public_key.export_key().decode('utf-8')
+        return public_pem
     
     def encryptWithClientKey(self, message, client_public_key):
         """Encrypt data using a client's public RSA key"""
@@ -65,56 +170,6 @@ class RSAManager:
             
         except Exception as e:
             print(f"Client RSA encryption error: {e}")
-            return None
-    
-    def generateAESKey(self):
-        """Generate a new AES key and return it in base64 format"""
-        try:
-            # Generate a new AES key (32 bytes = 256 bits)
-            aes_key = os.urandom(32)
-            # Convert to base64 for easy transmission
-            aes_key_b64 = base64.b64encode(aes_key).decode('utf-8')
-            return aes_key_b64
-        except Exception as e:
-            print(f"AES key generation error: {e}")
-            return None
-    
-    def encryptAES(self,aes_key, message):
-        """Encrypt a message using RSA"""
-        try:
-            if not aes_key:
-                return None
-                
-            # Encrypt the message with RSA
-            if isinstance(message, str):
-                message_bytes = message.encode('utf-8')
-            else:
-                message_bytes = message
-                
-            encrypted = self.public_key.encrypt(
-                message_bytes,
-                padding.PKCS1v15()
-            )
-            return base64.b64encode(encrypted).decode('utf-8')
-            
-        except Exception as e:
-            print(f"AES encryption error: {e}")
-            return None
-    
-    def decryptRSA(self, encrypted_message):
-        if not encrypted_message:
-            return None
-        try:
-            encrypted_bytes = base64.b64decode(encrypted_message.encode('utf-8'))
-            
-            decrypted = self.private_key.decrypt(
-                encrypted_bytes,
-                padding.PKCS1v15()
-            )
-            return decrypted.decode('utf-8')
-        
-        except Exception as e:
-            print(f"Decryption error: {e}")
             return None
     
     def decrypt_json_data(self, encrypted_data):

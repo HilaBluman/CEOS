@@ -504,9 +504,29 @@ def handle_user_files(client_socket, headers_data):
     logger.info("Handling user files request")
     
     try:
-
-        user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)', "userId")    
-        decrypted_user_id = rsa_manager.decryptRSA(user_id)
+        user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)', "userId")
+        is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
+        
+        if not user_id:
+            response = ready_to_send("400 Bad Request", json.dumps({'error': "not user id found"}), "application/json")
+            client_socket.send(response.encode())
+            return
+        if is_encrypted and is_encrypted.lower() == 'true':
+            logger.info("Decrypting AES encrypted user ID")
+            try:
+                # Decrypt the AES encrypted user ID
+                decrypted_user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
+                if not decrypted_user_id:
+                    raise ValueError("Failed to decrypt user ID")
+            except Exception as e:
+                logger.error(f"Error decrypting user ID: {str(e)}")
+                error_response = json.dumps({'error': 'Failed to decrypt user ID'})
+                response = ready_to_send("400 Bad Request", error_response, "application/json")
+                client_socket.send(response.encode())
+                return
+        else:
+            logger.info("Using unencrypted user ID")
+            decrypted_user_id = user_id
 
         if not decrypted_user_id:
             logger.error("No valid userId header found")
