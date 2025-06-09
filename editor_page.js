@@ -110,17 +110,17 @@ class ClientEncryption {
 
     encryptDataAES(data, key) {
         try {
-            console.log('🔒 AES Encryption Debug:');
-            console.log('- Data to encrypt:', data);
-            console.log('- Key (base64):', key);
+            //console.log('🔒 AES Encryption Debug:');
+            //console.log('- Data to encrypt:', data);
+            //console.log('- Key (base64):', key);
             
             // Convert key from base64 to WordArray
             const keyBytes = CryptoJS.enc.Base64.parse(key);
-            console.log('- Key bytes length:', keyBytes.words.length * 4, 'bytes');
+            //console.log('- Key bytes length:', keyBytes.words.length * 4, 'bytes');
             
             // Generate random IV
             const iv = CryptoJS.lib.WordArray.random(16); // 16 bytes = 128 bits
-            console.log('- Generated IV:', CryptoJS.enc.Base64.stringify(iv));
+            //console.log('- Generated IV:', CryptoJS.enc.Base64.stringify(iv));
             
             // Encrypt the data
             const encrypted = CryptoJS.AES.encrypt(data, keyBytes, {
@@ -129,14 +129,14 @@ class ClientEncryption {
                 padding: CryptoJS.pad.Pkcs7
             });
             
-            console.log('- Encrypted ciphertext:', CryptoJS.enc.Base64.stringify(encrypted.ciphertext));
+            //console.log('- Encrypted ciphertext:', CryptoJS.enc.Base64.stringify(encrypted.ciphertext));
             
             // Combine IV + encrypted data and return as base64
             const combined = iv.concat(encrypted.ciphertext);
             const result = CryptoJS.enc.Base64.stringify(combined);
             
-            console.log('- Final combined result:', result);
-            console.log('- Combined length:', result.length);
+            //console.log('- Final combined result:', result);
+            //console.log('- Combined length:', result.length);
             
             return result;
             
@@ -148,24 +148,24 @@ class ClientEncryption {
     
     decryptDataAES(encryptedData, key) {
         try {
-            console.log('🔓 AES Decryption Debug:');
-            console.log('- Encrypted data:', encryptedData);
-            console.log('- Key (base64):', key);
+            //console.log('🔓 AES Decryption Debug:');
+            //console.log('- Encrypted data:', encryptedData);
+            //console.log('- Key (base64):', key);
             
             // Convert key from base64 to WordArray
             const keyBytes = CryptoJS.enc.Base64.parse(key);
-            console.log('- Key bytes length:', keyBytes.words.length * 4, 'bytes');
+            //console.log('- Key bytes length:', keyBytes.words.length * 4, 'bytes');
             
             // Parse the combined data
             const combined = CryptoJS.enc.Base64.parse(encryptedData);
-            console.log('- Combined data length:', combined.words.length * 4, 'bytes');
+            //console.log('- Combined data length:', combined.words.length * 4, 'bytes');
             
             // Extract IV (first 16 bytes) and ciphertext (rest)
             const iv = CryptoJS.lib.WordArray.create(combined.words.slice(0, 4)); // 4 words = 16 bytes
             const ciphertext = CryptoJS.lib.WordArray.create(combined.words.slice(4));
             
-            console.log('- Extracted IV:', CryptoJS.enc.Base64.stringify(iv));
-            console.log('- Extracted ciphertext length:', ciphertext.words.length * 4, 'bytes');
+            //console.log('- Extracted IV:', CryptoJS.enc.Base64.stringify(iv));
+            //console.log('- Extracted ciphertext length:', ciphertext.words.length * 4, 'bytes');
             
             // Create cipherParams object for decryption
             const cipherParams = CryptoJS.lib.CipherParams.create({
@@ -181,7 +181,7 @@ class ClientEncryption {
             
             // Convert to UTF-8 string
             const result = decrypted.toString(CryptoJS.enc.Utf8);
-            console.log('- Decrypted result:', result);
+            //console.log('- Decrypted result:', result);
             
             return result;
             
@@ -194,6 +194,15 @@ class ClientEncryption {
 
 // Global RSA instance
 let clientRSA;
+
+// Helper function to handle encrypted responses
+function handleEncryptedResponse(data) {
+    if (data && data.encrypted && data.encrypted_data && globalAES_key) {
+        const decryptedData = clientRSA.decryptDataAES(data.encrypted_data, globalAES_key);
+        return JSON.parse(decryptedData);
+    }
+    return data;
+}
 
 // Improved JSEncrypt waiting function with timeout
 function waitForJSEncrypt(timeout = 5000) {
@@ -399,6 +408,7 @@ let isViewer = false;
 let highlightedTxt = {start: -1, end: -1, selectedText: ""}
 let pollingInterval;
 let globalAES_key;
+let file_AES_key;
 
 let fileID = 0;     // changes after pciking a file
 let userID = 0;
@@ -713,15 +723,34 @@ async function saveAll() {
 
 async function saveInput(modification) {
     try {
-        const encodedModification = encodeURIComponent(modification);
-        const url = "/save?modification=" + encodedModification;
+        let headers = { 'Connection': 'keep-alive' };
+        
+        // Add AES encryption for sensitive data
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Saving input with AES encryption...');
+            const encryptedFileID = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
+            const encryptedUserID = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
+            const encryptedModification = clientRSA.encryptDataAES(modification, globalAES_key);
+            
+            headers['fileID'] = encryptedFileID;
+            headers['userID'] = encryptedUserID;
+            headers['encrypted'] = 'true';
+            
+            // Also encrypt the modification in the URL
+            const encodedModification = encodeURIComponent(encryptedModification);
+            var url = "/save?modification=" + encodedModification;
+        } else {
+            console.log('🔓 Saving input without encryption...');
+            headers['fileID'] = fileID;
+            headers['userID'] = userID;
+            
+            const encodedModification = encodeURIComponent(modification);
+            var url = "/save?modification=" + encodedModification;
+        }
+
         const response = await fetch(url, {
             method: 'GET',
-            headers: { 
-                'fileID': fileID,
-                "userID": userID,
-                'Connection': 'keep-alive'
-            }
+            headers: headers
         });
 
         if (!response.ok) {
@@ -762,21 +791,21 @@ async function loadFile(fileId) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData);
+        
         if (data.fullContent) {
             Loadeing = true;
             lastModID = data.lastModID;
             console.log("lastModID: " + lastModID);
             
-            // Decrypt content if it's encrypted
-            let content = data.fullContent;
-            if (data.encrypted && globalAES_key) {
-                content = clientRSA.decryptDataAES(content, globalAES_key);
-            }
-            
-            codeEditor.setValue(content);
+            codeEditor.setValue(data.fullContent);
             console.log('✅ File loaded successfully');
             startPolling();
+        }
+        if (data.fileAESKey){
+            file_AES_key = data.fileAESKey
+            console.log('Saved file key successfully');
         }
         
     } catch (error) {
@@ -806,19 +835,31 @@ function selectFile(fileId, filename) {
 
 async function checkViewerStatus() {
     try {
+        let headers = {};
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Checking viewer status with AES encryption...');
+            headers['fileId'] = clientRSA.encryptDataAES(selectedFileId.toString(), globalAES_key);
+            headers['userId'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
+            headers['encrypted'] = 'true';
+        } else {
+            console.log('🔓 Checking viewer status without encryption...');
+            headers['fileId'] = selectedFileId;
+            headers['userId'] = userID;
+        }
+
         const response = await fetch('/check-viewer-status', {
             method: 'GET',
-            headers: {
-                'fileId': selectedFileId,
-                'userId': userID
-            }
+            headers: headers
         });
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData);
+        
         isViewer = data.isViewer;
         console.log("isViewer:", isViewer);
         setEditorReadOnly(isViewer); // Disable editing if the user is a viewer
@@ -856,7 +897,9 @@ async function getUserFiles(userId) {
             throw new Error(`HTTP error! status: ${response.status}, body: ${errorBody}`);
         }
 
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData);
+        
         console.log('✅ User files retrieved successfully');
         return {
             fileIds: data.filesId,
@@ -935,7 +978,6 @@ async function createNewFile(filename) {
         console.log(`📝 Creating new file: ${filename}`);
         
         let headers = {};
-        let body = {};
         
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
             console.log('🔒 Creating new file with AES encryption...');
@@ -953,7 +995,8 @@ async function createNewFile(filename) {
             headers: headers
         });
 
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData);
 
         if (response.status === 409) {
             showNotification('A file with this name already exists. Please choose a different name.', 'error');
@@ -966,6 +1009,10 @@ async function createNewFile(filename) {
 
         if (data.fileId !== 0) {
             fileID = data.fileId;
+        }
+        if (data.fileAESKey){
+            file_AES_key = data.fileAESKey
+            console.log('Saved file key successfully');
         }
 
         const fileTree = document.querySelector('.file-tree');
@@ -1026,7 +1073,9 @@ async function uploadNewFile(fileContent, filename) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const result = await response.json();
+        const rawResult = await response.json();
+        const result = handleEncryptedResponse(rawResult);
+        
         console.log('✅ File uploaded successfully:', result);
 
         const fileTree = document.querySelector('.file-tree');
@@ -1190,13 +1239,29 @@ async function pollForUpdates() {
     }
 
     try {
+        let headers = {};
+        
+        // Check if encryption is available and AES key exists
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            //console.log('🔒 Polling with AES encrypted headers...');
+            headers = {
+                'fileID': clientRSA.encryptDataAES(fileID.toString(), globalAES_key),
+                'userID': clientRSA.encryptDataAES(userID.toString(), globalAES_key),
+                'lastModID': clientRSA.encryptDataAES(lastModID.toString(), globalAES_key),
+                'encrypted': 'true'
+            };
+        } else {
+            //console.log('🔓 Polling with unencrypted headers...');
+            headers = {
+                'fileID': fileID.toString(),
+                'userID': userID.toString(),
+                'lastModID': lastModID.toString()
+            };
+        }
+
         const response = await fetch('/poll-updates', {
             method: 'GET',
-            headers: {
-                'fileID': fileID,
-                'userID': userID,
-                'lastModID': lastModID,
-            }
+            headers: headers
         });
 
         if (!response.ok) {
@@ -1336,18 +1401,28 @@ function popFileInfo(popupVariation) {
 
 async function loadVersionDetails() {
     try {
+        let headers = {};
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Loading version details with AES encryption...');
+            headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
+            headers['encrypted'] = 'true';
+        } else {
+            console.log('🔓 Loading version details without encryption...');
+            headers['fileID'] = fileID;
+        }
+
         const response = await fetch('/get-version-details', {
             method: 'GET',
-            headers: {
-                'fileID': fileID
-            }
+            headers: headers
         });
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData);
 
         const isOwner = data.owner_id === parseInt(userID);
         document.getElementById('filename2').textContent = selectedFileName;
@@ -1415,19 +1490,34 @@ function confirmDeleteAction(confirmed) {
 
 async function deleteVersion() {
     const version = document.getElementById('input-version-btn').value.trim();
+    
     try {
+        let headers = {};
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Deleting version with AES encryption...');
+            headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
+            headers['userID'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
+            headers['version'] = clientRSA.encryptDataAES(version, globalAES_key);
+            headers['encrypted'] = 'true';
+        } else {
+            console.log('🔓 Deleting version without encryption...');
+            headers['fileID'] = fileID;
+            headers['userID'] = userID;
+            headers['version'] = version;
+        }
+
         const response = await fetch('/delete-version', {
             method: 'DELETE',
-            headers: {
-                'fileID': fileID,
-                'userID': userID,
-                'version': version
-            }
+            headers: headers
         });
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
+
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData);
 
         document.getElementById('versions-details').classList.remove('slide-in');
         showNotification('Version deleted successfully', 'success');
@@ -1440,17 +1530,30 @@ async function deleteVersion() {
 
 async function deleteFile(){
     try {
+        let headers = {};
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Deleting file with AES encryption...');
+            headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
+            headers['userID'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
+            headers['encrypted'] = 'true';
+        } else {
+            console.log('🔓 Deleting file without encryption...');
+            headers['fileID'] = fileID;
+            headers['userID'] = userID;
+        }
+
         const response = await fetch('/delete-file', {
             method: 'DELETE',
-            headers: {
-                'fileID': fileID,
-                'userID': userID
-            }
+            headers: headers
         });
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
+
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData);
 
         document.getElementById('file-details').classList.remove('slide-in');
         codeEditor.setValue('');
@@ -1475,18 +1578,29 @@ async function deleteFile(){
 
 async function loadFileDetails() {
     try {
+        let headers = {};
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Loading file details with AES encryption...');
+            headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
+            headers['encrypted'] = 'true';
+        } else {
+            console.log('🔓 Loading file details without encryption...');
+            headers['fileID'] = fileID;
+        }
+
         const response = await fetch('/get-file-details', {
             method: 'GET',
-            headers: {
-                'fileID': fileID
-            }
+            headers: headers
         });
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData);
+        
         console.log("Details data :", JSON.stringify(data));
         document.getElementById('filename').textContent = data.filename;
         const isOwner = data.owner_id === parseInt(userID);
@@ -1552,16 +1666,31 @@ async function accessUser(usernameInput, request, roleInput) {
     }
 
     try {
+        let headers = {
+            'Content-Type': 'application/json',
+            'ownerID': userID      //if this function is called the user is the owner - just to be safe there is a check on the server side
+        };
+        
+        let body = { username, fileID, role };
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Accessing user with AES encryption...');
+            const encryptedBody = clientRSA.encryptDataAES(JSON.stringify(body), globalAES_key);
+            body = {
+                data: encryptedBody,
+                encrypted: true
+            };
+            headers['encrypted'] = 'true';
+        }
+
         const response = await fetch(prompt, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'ownerID': userID,      //if this function is called the user is the owner - just to be safe there is a check on the server side
-            },
-            body: JSON.stringify({ username, fileID, role }),
+            headers: headers,
+            body: JSON.stringify(body),
         });
 
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData);
 
         if (response.ok) {
             showNotification('Access ' + request + ' successfully! The user needs to refresh the files!', 'success');
@@ -1637,12 +1766,23 @@ function showNotification(message, type = 'info') {
 
 async function saveNewVersion() {
     try {
+        let headers = { 'Content-Type': 'application/json' };
+        let body = { fileID, userID, content: codeEditor.getValue() };
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Saving new version with AES encryption...');
+            const encryptedBody = clientRSA.encryptDataAES(JSON.stringify(body), globalAES_key);
+            body = {
+                data: encryptedBody,
+                encrypted: true
+            };
+            headers['encrypted'] = 'true';
+        }
+
         const response = await fetch('/save-new-version', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({fileID,userID, content: codeEditor.getValue() })
+            headers: headers,
+            body: JSON.stringify(body)
         });
 
         if (!response.ok) {
@@ -1650,7 +1790,8 @@ async function saveNewVersion() {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData);
             
         showNotification(data, 'success');
         loadVersionDetails();
@@ -1664,17 +1805,31 @@ async function saveNewVersion() {
 async function showVersion(){
     isViewer = true;
     const version = document.getElementById('input-version-btn').value.trim();
+    
     try {
+        let headers = {};
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Showing version with AES encryption...');
+            headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
+            headers['userID'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
+            headers['version'] = clientRSA.encryptDataAES(version, globalAES_key);
+            headers['encrypted'] = 'true';
+        } else {
+            console.log('🔓 Showing version without encryption...');
+            headers['fileID'] = fileID;
+            headers['userID'] = userID;
+            headers['version'] = version;
+        }
+
         const response = await fetch('/show-version', {
             method: 'GET',
-            headers: {
-                'fileID': fileID,
-                'userID': userID,
-                'version': version
-            }
+            headers: headers
         });
 
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData);
+        
         console.log("data.fullContent: " + data.fullContent)
 
         if (data.fullContent) {

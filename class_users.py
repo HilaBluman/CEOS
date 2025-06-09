@@ -99,40 +99,40 @@ class RSAManager:
     def decryptAES(self, encrypted: str, aes_key: str) -> Optional[str]:
         """Decrypt message using AES"""
         try:
-            print(f"🔓 Server AES Decryption Debug:")
-            print(f"- Encrypted data length: {len(encrypted)}")
-            print(f"- Encrypted data (first 50 chars): {encrypted[:50]}...")
-            print(f"- AES key length: {len(aes_key)}")
+            #print(f"Server AES Decryption Debug:")
+            #print(f"- Encrypted data length: {len(encrypted)}")
+            #print(f"- Encrypted data (first 50 chars): {encrypted[:50]}...")
+            #print(f"- AES key length: {len(aes_key)}")
             
             if not aes_key:
                 raise ValueError("AES key not provided")
                 
             # Decode the base64 input
             encrypted_bytes = base64.b64decode(encrypted)
-            print(f"- Decoded bytes length: {len(encrypted_bytes)}")
+            #print(f"- Decoded bytes length: {len(encrypted_bytes)}")
             
             key_bytes = base64.b64decode(aes_key)
-            print(f"- Key bytes length: {len(key_bytes)}")
+            #print(f"- Key bytes length: {len(key_bytes)}")
             
             # Extract IV and ciphertext
             iv = encrypted_bytes[:AES.block_size]
             ciphertext = encrypted_bytes[AES.block_size:]
             
-            print(f"- IV length: {len(iv)} bytes")
-            print(f"- Ciphertext length: {len(ciphertext)} bytes")
-            print(f"- Expected IV length: {AES.block_size} bytes")
+            #print(f"- IV length: {len(iv)} bytes")
+            #print(f"- Ciphertext length: {len(ciphertext)} bytes")
+            #print(f"- Expected IV length: {AES.block_size} bytes")
             
             # Create cipher and decrypt
             cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
             decrypted = cipher.decrypt(ciphertext)
             
-            print(f"- Decrypted bytes length: {len(decrypted)}")
+            #print(f"- Decrypted bytes length: {len(decrypted)}")
             
             # Unpad the decrypted data
             try:
                 unpadded_data = unpad(decrypted, AES.block_size)
                 result = unpadded_data.decode('utf-8')
-                print(f"- Final decrypted result: {result}")
+                #print(f"- Final decrypted result: {result}")
                 return result
             except ValueError as e:
                 print(f"❌ Padding error: {str(e)}")
@@ -468,6 +468,17 @@ class FileInfoDatabase:
             return {'status': 500, 'message': str(e)}
         finally:
             conn.close()
+    def get_aes_key(self, file_id):
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT aesKey FROM fileInfo WHERE fileID = ?', (file_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return result['aesKey']
+        return None
 
 class FilePermissionsDatabase:
     def __init__(self, db_path):

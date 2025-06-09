@@ -6,8 +6,7 @@ import threading
 import urllib.parse
 import fcntl
 import logging
-from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase, RSAManager
-import base64
+from class_users import UserDatabase, FileInfoDatabase, FilePermissionsDatabase, ChangeLogDatabase, VersionDatabase, RSAManager 
 
 # Set up logging
 logging.basicConfig(
@@ -31,6 +30,26 @@ rsa_manager = RSAManager()
 global_AES_key = rsa_manager.generateAESKey()
 
 logger.info("Database connections initialized")
+
+def should_encrypt_response(headers_data):
+    """Check if the request indicates AES encryption should be used"""
+    encrypted_header = re.search(r'encrypted:\s*(\S+)', headers_data)
+    return encrypted_header and encrypted_header.group(1).lower() == 'true'
+
+def encrypt_response_data(data, use_encryption=False):
+    """Encrypt response data if encryption is enabled"""
+    if use_encryption and global_AES_key:
+        try:
+            if isinstance(data, dict):
+                data_str = json.dumps(data)
+            else:
+                data_str = str(data)
+            encrypted_data = rsa_manager.encryptAES(data_str, global_AES_key)
+            return {"encrypted_data": encrypted_data, "encrypted": True}
+        except Exception as e:
+            logger.error(f"Error encrypting response data: {str(e)}")
+            return data
+    return data
 
 def file_exist(file_path):
     """Check if file exists at given path"""
@@ -108,28 +127,6 @@ def ready_to_send(status, data_file, content_type="text/html",Cache=False):
     return headers + str(data_file)
 
 
-"""def find_file_type(request):
-    #Determine file type and adjust request path
-    logger.debug(f"Finding file type for request: {request}")
-    
-    if request == "/":
-        request = r"/home_page.html"
-        file_type = "text/html"
-    elif r".html" in request:
-        file_type = "text/html"
-    elif r"/js" in request:
-        file_type = "text/js"
-    elif r"/imgs" in request:
-        index_dot = request.find(".") + 1
-        file_type = "image/" + request[index_dot:index_dot + 3]
-    else:
-        index_dot = request.find(".") + 1
-        file_type = "text/" + request[index_dot:index_dot + 3]
-    
-    logger.debug(f"Determined file type: {file_type} for request: {request}")
-    return request, file_type
-"""
-
 def get_content_of_upload(client_socket, content_length):
     """Receive file upload content from client"""
     logger.info(f"Receiving upload content, expected length: {content_length}")
@@ -201,12 +198,20 @@ def get_header(client_socket, headers_data, header_pattern=r'filename:\s*(\S+)',
     if not header_match:
         logger.error(f"Header '{header_name}' not found in request")
         logger.debug(f"All headers received:\n{headers_data}")
+        
+        # Don't send error response for polling requests - just return None
+        if header_name in ['fileID', 'lastModID', 'userID'] and '/poll-updates' in headers_data:
+            logger.debug(f"Skipping error response for polling header: {header_name}")
+            return None
+            
         error_msg = f"Header '{header_name}' not found"
-        client_socket.send(ready_to_send("406 Not Acceptable", error_msg, "text/plain").encode())
+        try:
+            client_socket.send(ready_to_send("406 Not Acceptable", error_msg, "text/plain").encode())
+        except:
+            pass  # Ignore if client disconnected
         return None
     
     value = header_match.group(1)
-    logger.debug(f"Header '{header_name}' extracted: {value}")
     return value
 
 
@@ -214,12 +219,19 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
     """Create a new file for a user"""
     logger.info("Creating new file")
     
+    use_encryption = should_encrypt_response(headers_data)
+    
     user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)', "userId")
     if not user_id:
         logger.error("User ID not found in headers")
         return
-                
-    decrypted_user_id = rsa_manager.decryptRSA(user_id)
+    
+    # Check if the user ID is AES encrypted
+    is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
+    if is_encrypted and is_encrypted.lower() == 'true':
+        decrypted_user_id = rsa_manager.decryptAES(user_id, global_AES_key)
+    else:
+        decrypted_user_id = rsa_manager.decryptRSA(user_id)
 
     if not decrypted_user_id:
         logger.error("No valid userId header found")
@@ -230,10 +242,14 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
         logger.error("Filename not found in headers")
         return
     
-    decrypted_filename = rsa_manager.decryptRSA(filename)
+    # Check if the filename is AES encrypted
+    if is_encrypted and is_encrypted.lower() == 'true':
+        decrypted_filename = rsa_manager.decryptAES(filename, global_AES_key)
+    else:
+        decrypted_filename = rsa_manager.decryptRSA(filename)
 
     if not decrypted_filename:
-        logger.error("No valid userId header found")
+        logger.error("No valid filename found")
         return
     
     logger.info(f"Creating file '{decrypted_filename}' for user {decrypted_user_id}")
@@ -242,11 +258,10 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
     existing_file = file_db.check_file_exists(decrypted_user_id, decrypted_filename)
     if existing_file:
         logger.warning(f"File '{decrypted_filename}' already exists for user {decrypted_user_id}")
-        data = json.dumps({
+        data = {
             "error": "File already exists",
             "fileId": 0
-        })
-        response = ready_to_send("200", data, "application/json")
+        }
     else:
         # Create new file
         result = file_db.add_file(decrypted_filename, decrypted_user_id)
@@ -269,15 +284,17 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
             result = file_permissions_db.grant_access(file_id, decrypted_user_id, "owner")
             logger.info(f"Owner access granted, result: {result['status']} - {result['message']}")
 
-            data = json.dumps({
+            data = {
                 "success": "File created successfully",
                 "fileId": file_id
-            })
-            response = ready_to_send(result['status'], data, "application/json")
+            }
         else:
             logger.error(f"File creation failed: {result['message']}")
-            response = ready_to_send(result['status'], result['message'], "application/json")
+            data = {"error": result['message']}
     
+    # Encrypt response if needed
+    response_data = encrypt_response_data(data, use_encryption)
+    response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
     client_socket.send(response.encode())
 
 
@@ -357,7 +374,7 @@ def modify_file(row, action, content, file_path, linesLength):
         raise ValueError(f"An error occurred: {e}")
 
 
-def show_version(file_id, user_id, version, client_socket):
+def show_version(file_id, user_id, version, client_socket, use_encryption=False):
     """Show a specific version of a file"""
     logger.info(f"Showing version {version} of file {file_id} for user {user_id}")
     
@@ -369,11 +386,14 @@ def show_version(file_id, user_id, version, client_socket):
     
     if fullcontent is None:
         logger.warning(f"Version {version} not found for file {file_id}")
-        response = ready_to_send("404 Not Found", json.dumps({"error": "Version or content not found"}), "application/json")
+        data = {"error": "Version or content not found"}
     else:
         logger.debug(f"Version content retrieved: {fullcontent[0][:100]}...")
-        response = ready_to_send("200 OK", json.dumps({"fullContent": fullcontent[0]}), "application/json")
+        data = {"fullContent": fullcontent[0]}
     
+    # Encrypt response if needed
+    response_data = encrypt_response_data(data, use_encryption)
+    response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
     client_socket.send(response.encode())
 
 
@@ -422,20 +442,63 @@ def save_modification(client_socket, file_id, file_name, file_path, match1, user
 
 # GET request handlers
 def handle_poll_updates(client_socket, headers_data):
-    """Handle polling for file updates"""
+    """Handle polling for file updates with encryption support"""
     try:
-        fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
-        lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)', "lastModID")
-        userID = get_header(client_socket, headers_data, r'userID:\s*(\d+)', "userID")
+        # Check if request is encrypted
+        encrypted_header = re.search(r'encrypted:\s*(\S+)', headers_data)
+        is_encrypted = encrypted_header and encrypted_header.group(1).lower() == 'true'
         
-        if not fileID or not lastModID or not userID:
+        if is_encrypted:
+            #logger.info("Handling encrypted poll-updates request")
+            # Get encrypted headers - note the different regex pattern for encrypted data
+            fileID_encrypted = get_header(client_socket, headers_data, r'fileID:\s*(\S+)', "fileID")
+            lastModID_encrypted = get_header(client_socket, headers_data, r'lastModID:\s*(\S+)', "lastModID")
+            userID_encrypted = get_header(client_socket, headers_data, r'userID:\s*(\S+)', "userID")
+            
+            if not fileID_encrypted or not lastModID_encrypted or not userID_encrypted:
+                logger.error("Missing encrypted headers in poll-updates")
+                return
+            
+            # Decrypt the headers
+            try:
+                fileID = rsa_manager.decryptAES(fileID_encrypted, global_AES_key)
+                lastModID = rsa_manager.decryptAES(lastModID_encrypted, global_AES_key)
+                userID = rsa_manager.decryptAES(userID_encrypted, global_AES_key)
+                
+                if not fileID or not lastModID or not userID:
+                    logger.error("Failed to decrypt poll-updates headers")
+                    return
+                    
+                logger.debug(f"Decrypted polling headers: fileID={fileID}, userID={userID}, lastModID={lastModID}")
+                    
+            except Exception as e:
+                logger.error(f"Error decrypting poll-updates headers: {str(e)}")
+                return
+        else:
+            #logger.info("Handling unencrypted poll-updates request")
+            # Get unencrypted headers (original method)
+            fileID = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
+            lastModID = get_header(client_socket, headers_data, r'lastModID:\s*(\d+)', "lastModID")
+            userID = get_header(client_socket, headers_data, r'userID:\s*(\d+)', "userID")
+            
+            if not fileID or not lastModID or not userID:
+                logger.error("Missing unencrypted headers in poll-updates")
+                return
+        
+        # Convert to integers
+        try:
+            fileID = int(fileID)
+            lastModID = int(lastModID)
+            userID = int(userID)
+        except ValueError as e:
+            logger.error(f"Error converting headers to integers: {str(e)}")
             return
         
         updates = change_log_db.get_changes_for_user(fileID, lastModID, userID)
         if updates:
-            response = ready_to_send(200, json.dumps(updates), content_type="application/json")
+            response = ready_to_send("200 OK", json.dumps(updates), content_type="application/json")
         else:
-            response = ready_to_send(200, json.dumps("No updates"), content_type="application/json")
+            response = ready_to_send("200 OK", json.dumps("No updates"), content_type="application/json")
         
         client_socket.send(response.encode())
         
@@ -444,6 +507,7 @@ def handle_poll_updates(client_socket, headers_data):
     except Exception as e:
         logger.error(f"Error in poll-updates: {str(e)}")
         handle_500(client_socket)
+
 
 
 def handle_save_request(client_socket, headers_data, request, PATH_TO_FOLDER):
@@ -473,29 +537,46 @@ def handle_file_details(client_socket, headers_data):
     logger.info("Handling file details request")
     
     try:
-        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
+        use_encryption = should_encrypt_response(headers_data)
+        
+        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\S+)', "fileID")
         if not file_id:
+            return
+
+        # Decrypt file_id if it's AES encrypted
+        is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
+        if is_encrypted and is_encrypted.lower() == 'true':
+            file_id = rsa_manager.decryptAES(file_id, global_AES_key)
+        
+        if not file_id:
+            logger.error("Failed to decrypt file ID")
             return
 
         file_details = file_db.get_file_details(file_id)
         if not file_details:
-            response = ready_to_send("404 Not Found", json.dumps({"error": "File not found"}), "application/json")
+            data = {"error": "File not found"}
+            response_data = encrypt_response_data(data, use_encryption)
+            response = ready_to_send("404 Not Found", json.dumps(response_data), "application/json")
             client_socket.send(response.encode())
             return
 
         users_with_access = file_permissions_db.get_users_with_access(file_id)
-        response_data = {
+        data = {
             "filename": file_details['filename'],
             "users": users_with_access,
             "owner_id": file_details['owner_id']
         }
+        
+        # Encrypt response if needed
+        response_data = encrypt_response_data(data, use_encryption)
         response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
         client_socket.send(response.encode())
         
     except Exception as e:
         logger.error(f"Error in get-file-details: {str(e)}")
-        error_response = json.dumps({"error": str(e)})
-        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+        error_data = {"error": str(e)}
+        response_data = encrypt_response_data(error_data, use_encryption)
+        response = ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json")
         client_socket.send(response.encode())
 
 
@@ -504,13 +585,18 @@ def handle_user_files(client_socket, headers_data):
     logger.info("Handling user files request")
     
     try:
+        use_encryption = should_encrypt_response(headers_data)
+        
         user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)', "userId")
         is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
         
         if not user_id:
-            response = ready_to_send("400 Bad Request", json.dumps({'error': "not user id found"}), "application/json")
+            error_data = {'error': "not user id found"}
+            response_data = encrypt_response_data(error_data, use_encryption)
+            response = ready_to_send("400 Bad Request", json.dumps(response_data), "application/json")
             client_socket.send(response.encode())
             return
+            
         if is_encrypted and is_encrypted.lower() == 'true':
             logger.info("Decrypting AES encrypted user ID")
             try:
@@ -520,8 +606,9 @@ def handle_user_files(client_socket, headers_data):
                     raise ValueError("Failed to decrypt user ID")
             except Exception as e:
                 logger.error(f"Error decrypting user ID: {str(e)}")
-                error_response = json.dumps({'error': 'Failed to decrypt user ID'})
-                response = ready_to_send("400 Bad Request", error_response, "application/json")
+                error_data = {'error': 'Failed to decrypt user ID'}
+                response_data = encrypt_response_data(error_data, use_encryption)
+                response = ready_to_send("400 Bad Request", json.dumps(response_data), "application/json")
                 client_socket.send(response.encode())
                 return
         else:
@@ -541,18 +628,21 @@ def handle_user_files(client_socket, headers_data):
         
         logger.info(f"Found {len(file_ids)} files for user {decrypted_user_id}")
         
-        response_data = json.dumps({
+        data = {
             'filesId': file_ids,
             'filenames': file_names
-        })
+        }
         
-        response = ready_to_send("200 OK", response_data, "application/json")
+        # Encrypt response if needed
+        response_data = encrypt_response_data(data, use_encryption)
+        response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
         client_socket.send(response.encode())
         
     except Exception as e:
         logger.error(f"Error getting user files: {str(e)}")
-        error_response = json.dumps({'error': str(e)})
-        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+        error_data = {'error': str(e)}
+        response_data = encrypt_response_data(error_data, use_encryption)
+        response = ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json")
         client_socket.send(response.encode())
 
 
@@ -561,22 +651,37 @@ def handle_version_details(client_socket, headers_data):
     logger.info("Handling version details request")
     
     try:
-        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
+        use_encryption = should_encrypt_response(headers_data)
+        
+        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\S+)', "fileID")
         if not file_id:
             return
         
+        # Decrypt file_id if it's AES encrypted
+        is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
+        if is_encrypted and is_encrypted.lower() == 'true':
+            file_id = rsa_manager.decryptAES(file_id, global_AES_key)
+        
+        if not file_id:
+            logger.error("Failed to decrypt file ID")
+            return
+        
         versions = version_log_db.get_versions_by_fileID(file_id)
-        response_data = json.dumps({
+        data = {
             'versions': versions,
             'owner_id': file_db.get_owner_id(file_id)
-        })
-        response = ready_to_send("200 OK", response_data, "application/json")
+        }
+        
+        # Encrypt response if needed
+        response_data = encrypt_response_data(data, use_encryption)
+        response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
         client_socket.send(response.encode())
         
     except Exception as e:
         logger.error(f"Error in get-version-details: {str(e)}")
-        error_response = json.dumps({"error": str(e)})
-        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+        error_data = {"error": str(e)}
+        response_data = encrypt_response_data(error_data, use_encryption)
+        response = ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json")
         client_socket.send(response.encode())
 
 
@@ -584,28 +689,57 @@ def handle_show_version(client_socket, headers_data):
     """Handle show version requests"""
     logger.info("Handling show version request")
     
-    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
-    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)', "userID")
-    version = get_header(client_socket, headers_data, r'version:\s*(\d+)', "version")
+    use_encryption = should_encrypt_response(headers_data)
+    
+    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\S+)', "fileID")
+    user_id = get_header(client_socket, headers_data, r'userID:\s*(\S+)', "userID")
+    version = get_header(client_socket, headers_data, r'version:\s*(\S+)', "version")
     
     if not file_id or not user_id or not version:
         return
     
-    show_version(file_id, user_id, version, client_socket)
+    # Decrypt parameters if they're AES encrypted
+    is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
+    if is_encrypted and is_encrypted.lower() == 'true':
+        file_id = rsa_manager.decryptAES(file_id, global_AES_key)
+        user_id = rsa_manager.decryptAES(user_id, global_AES_key)
+        version = rsa_manager.decryptAES(version, global_AES_key)
+    
+    if not file_id or not user_id or not version:
+        logger.error("Failed to decrypt parameters")
+        return
+    
+    show_version(file_id, user_id, version, client_socket, use_encryption)
 
 
 def handle_viewer_status(client_socket, headers_data):
     """Handle check viewer status requests"""
     logger.info("Handling viewer status check")
     
-    file_id = get_header(client_socket, headers_data, r'fileId:\s*(\d+)', "fileId")
-    user_id = get_header(client_socket, headers_data, r'userId:\s*(\d+)', "userId")
+    use_encryption = should_encrypt_response(headers_data)
+    
+    file_id = get_header(client_socket, headers_data, r'fileId:\s*(\S+)', "fileId")
+    user_id = get_header(client_socket, headers_data, r'userId:\s*(\S+)', "userId")
     
     if not file_id or not user_id:
         return
     
+    # Decrypt parameters if they're AES encrypted
+    is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
+    if is_encrypted and is_encrypted.lower() == 'true':
+        file_id = rsa_manager.decryptAES(file_id, global_AES_key)
+        user_id = rsa_manager.decryptAES(user_id, global_AES_key)
+    
+    if not file_id or not user_id:
+        logger.error("Failed to decrypt parameters")
+        return
+    
     is_editor_or_owner = file_permissions_db.is_editor_or_owner(file_id, user_id)
-    response = ready_to_send("200 OK", json.dumps({"isViewer": not is_editor_or_owner}), "application/json")
+    data = {"isViewer": not is_editor_or_owner}
+    
+    # Encrypt response if needed
+    response_data = encrypt_response_data(data, use_encryption)
+    response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
     client_socket.send(response.encode())
 
 
@@ -621,12 +755,19 @@ def handle_load_file(client_socket, headers_data, PATH_TO_FOLDER):
     logger.info("Handling load file request")
     
     try:
+        use_encryption = should_encrypt_response(headers_data)
+        
         fileId = get_header(client_socket, headers_data, r'fileId:\s*(\S+)', "fileId")
         if not fileId:
             logger.info(f"Found user ID using pattern userId: {fileId}")
             return
-                
-        decrypted_file_id = rsa_manager.decryptRSA(fileId)
+        
+        # Check if the file ID is AES encrypted
+        is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
+        if is_encrypted and is_encrypted.lower() == 'true':
+            decrypted_file_id = rsa_manager.decryptAES(fileId, global_AES_key)
+        else:
+            decrypted_file_id = rsa_manager.decryptRSA(fileId)
 
         if not decrypted_file_id:
             logger.error("No valid userId header found")
@@ -638,7 +779,9 @@ def handle_load_file(client_socket, headers_data, PATH_TO_FOLDER):
         
         if status == 404:
             logger.warning(f"File not found: {filename}")
-            response = ready_to_send("404 Not Found", filename, "application/json")
+            data = {"error": filename}
+            response_data = encrypt_response_data(data, use_encryption)
+            response = ready_to_send("404 Not Found", json.dumps(response_data), "application/json")
             client_socket.send(response.encode())
         else:
             file_path = f"{PATH_TO_FOLDER}/uploads/{filename}"
@@ -649,20 +792,26 @@ def handle_load_file(client_socket, headers_data, PATH_TO_FOLDER):
             else:
                 with open(file_path, 'r') as file:
                     content = file.read()
-
+            fileAESKey = file_db.get_aes_key(decrypted_file_id)
+            logger.info("fileAESKey: " + str(fileAESKey))
             lastModID = change_log_db.get_last_mod_id(decrypted_file_id)
-            response_data = {
+            data = {
                 'lastModID': lastModID,
-                'fullContent': content
+                'fullContent': content,
+                'fileAESKey': fileAESKey
             }
+            
+            # Encrypt response if needed
+            response_data = encrypt_response_data(data, use_encryption)
             response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
             client_socket.send(response.encode())
             logger.info("File loaded successfully")
 
     except Exception as e:
         logger.error(f"Error in load handler: {str(e)}")
-        error_response = json.dumps({'error': str(e)})
-        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+        error_data = {'error': str(e)}
+        response_data = encrypt_response_data(error_data, use_encryption)
+        response = ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json")
         client_socket.send(response.encode())
 
 
@@ -897,8 +1046,26 @@ def handle_user_permissions(client_socket, content_length, headers_data, request
     """Handle grant/revoke user permissions requests"""
     logger.info(f"Handling user permissions request: {request}")
     
+    use_encryption = should_encrypt_response(headers_data)
+    
     body = client_socket.recv(content_length).decode()
-    data = json.loads(body)
+    
+    # Decrypt body if it's AES encrypted
+    is_encrypted = 'encrypted' in headers_data and 'true' in headers_data
+    if is_encrypted:
+        try:
+            body_data = json.loads(body)
+            if body_data.get('encrypted'):
+                decrypted_body = rsa_manager.decryptAES(body_data.get('data'), global_AES_key)
+                data = json.loads(decrypted_body)
+            else:
+                data = body_data
+        except Exception as e:
+            logger.error(f"Error decrypting request body: {str(e)}")
+            data = json.loads(body)
+    else:
+        data = json.loads(body)
+    
     username = data.get('username')
     userID = user_db.get_user_id(username)
     fileID = data.get('fileID')
@@ -907,10 +1074,14 @@ def handle_user_permissions(client_socket, content_length, headers_data, request
 
     if not userID:
         logger.error(f"User not found: {username}")
-        client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not a user!!"), "application/json").encode())
+        error_data = "Not a user!!"
+        response_data = encrypt_response_data(error_data, use_encryption)
+        client_socket.send(ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json").encode())
     elif not ownerID or not file_db.is_owner(int(fileID), int(ownerID)):
         logger.error(f"Permission denied: User {ownerID} is not owner of file {fileID}")
-        client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
+        error_data = "Not owner!!"
+        response_data = encrypt_response_data(error_data, use_encryption)
+        client_socket.send(ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json").encode())
     else:
         if "/revoke-user-to-file" in request:
             logger.info(f"Revoking access for user {userID} from file {fileID}")
@@ -919,18 +1090,30 @@ def handle_user_permissions(client_socket, content_length, headers_data, request
             logger.info(f"Granting {role} access for user {userID} to file {fileID}")
             response = file_permissions_db.grant_access(fileID, userID, role)
         
-        client_socket.send(ready_to_send(response['status'], json.dumps(response), "application/json").encode())
+        # Encrypt response if needed
+        response_data = encrypt_response_data(response, use_encryption)
+        client_socket.send(ready_to_send(response['status'], json.dumps(response_data), "application/json").encode())
 
 
-def handle_save_version(client_socket, content_length):
+def handle_save_version(client_socket, content_length, headers_data):
     """Handle save new version request"""
     logger.info("Handling save new version request")
+    
     try:
+        use_encryption = should_encrypt_response(headers_data)
+        
         content = get_content_of_upload(client_socket, content_length)
         if not content:
             raise ValueError("No content received")
+        
+        # Decrypt content if it's AES encrypted
+        data_json = json.loads(content)
+        if data_json.get('encrypted'):
+            decrypted_content = rsa_manager.decryptAES(data_json.get('data'), global_AES_key)
+            data = json.loads(decrypted_content)
+        else:
+            data = data_json
             
-        data = json.loads(content)
         file_id = data.get('fileID')
         user_id = data.get('userID')
         content = data.get('content')
@@ -940,14 +1123,18 @@ def handle_save_version(client_socket, content_length):
             
         if file_permissions_db.is_viewer(file_id, user_id):
             logger.warning(f"User {user_id} is a viewer and cannot save new versions")
-            response = ready_to_send("403 Forbidden", json.dumps({"error": "Viewers cannot save new versions"}), "application/json")
+            error_data = {"error": "Viewers cannot save new versions"}
+            response_data = encrypt_response_data(error_data, use_encryption)
+            response = ready_to_send("403 Forbidden", json.dumps(response_data), "application/json")
             client_socket.send(response.encode())
             return
             
-        save_new_version(file_id, user_id, content, client_socket)
+        save_new_version(file_id, user_id, content, client_socket, use_encryption)
     except ValueError as e:
         logger.error(f"Error in save version request: {str(e)}")
-        response = ready_to_send("400 Bad Request", json.dumps({"error": str(e)}), "application/json")
+        error_data = {"error": str(e)}
+        response_data = encrypt_response_data(error_data, use_encryption)
+        response = ready_to_send("400 Bad Request", json.dumps(response_data), "application/json")
         client_socket.send(response.encode())
     except Exception as e:
         logger.error(f"Unexpected error in save version request: {str(e)}")
@@ -960,8 +1147,13 @@ def handle_upload_file(client_socket, content_length, headers_data, PATH_TO_FOLD
     
     content = get_content_of_upload(client_socket, content_length)
     if content:
-        content = json.loads(content)
-        new_file(client_socket, PATH_TO_FOLDER, headers_data, content['content'])
+        # Decrypt content if it's AES encrypted
+        content_json = json.loads(content)
+        if content_json.get('encrypted'):
+            decrypted_content = rsa_manager.decryptAES(content_json.get('content'), global_AES_key)
+            content_json['content'] = decrypted_content
+        
+        new_file(client_socket, PATH_TO_FOLDER, headers_data, content_json['content'])
     else:
         logger.error("No content received for file upload")
         client_socket.send(ready_to_send("400 Bad Request", "Broken pipe or No content").encode())
@@ -987,7 +1179,7 @@ def handle_post_requests(client_socket, request, headers_data, PATH_TO_FOLDER):
         elif "/grant-user-to-file" in request or "/revoke-user-to-file" in request:
             handle_user_permissions(client_socket, content_length, headers_data, request)
         elif "/save-new-version" in request:
-            handle_save_version(client_socket, content_length)
+            handle_save_version(client_socket, content_length, headers_data)
         elif "/disconnection" in request:
             logger.info("Client disconnection request")
             if content_length > 0:
@@ -1010,21 +1202,39 @@ def handle_post_requests(client_socket, request, headers_data, PATH_TO_FOLDER):
 def handle_delete_version(client_socket, headers_data):
     """Handle version deletion request"""
     logger.info("Handling version deletion request")
+    
     try:
+        use_encryption = should_encrypt_response(headers_data)
+        
         file_id = get_header(client_socket, headers_data, r'fileID:\s*(\S+)', "fileID")
         user_id = get_header(client_socket, headers_data, r'userID:\s*(\S+)', "userID")
         version = get_header(client_socket, headers_data, r'version:\s*(\S+)', "version")
         
+        # Decrypt parameters if they're AES encrypted
+        is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
+        if is_encrypted and is_encrypted.lower() == 'true':
+            file_id = rsa_manager.decryptAES(file_id, global_AES_key)
+            user_id = rsa_manager.decryptAES(user_id, global_AES_key)
+            version = rsa_manager.decryptAES(version, global_AES_key)
+        
+        if not file_id or not user_id or not version:
+            logger.error("Failed to decrypt parameters or missing parameters")
+            return
+        
         if file_permissions_db.is_viewer(file_id, user_id):
             logger.warning(f"User {user_id} is a viewer and cannot delete versions")
-            response = ready_to_send("403 Forbidden", json.dumps({"error": "Viewers cannot delete versions"}), "application/json")
+            error_data = {"error": "Viewers cannot delete versions"}
+            response_data = encrypt_response_data(error_data, use_encryption)
+            response = ready_to_send("403 Forbidden", json.dumps(response_data), "application/json")
             client_socket.send(response.encode())
             return
             
-        delete_version(file_id, user_id, version, client_socket)
+        delete_version(file_id, user_id, version, client_socket, use_encryption)
     except ValueError as e:
         logger.error(f"Error in delete version request: {str(e)}")
-        response = ready_to_send("400 Bad Request", json.dumps({"error": str(e)}), "application/json")
+        error_data = {"error": str(e)}
+        response_data = encrypt_response_data(error_data, use_encryption)
+        response = ready_to_send("400 Bad Request", json.dumps(response_data), "application/json")
         client_socket.send(response.encode())
     except Exception as e:
         logger.error(f"Unexpected error in delete version request: {str(e)}")
@@ -1036,28 +1246,43 @@ def handle_delete_file(client_socket, headers_data, PATH_TO_FOLDER):
     logger.info("Handling delete file request")
     
     try:
-        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
-        user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)', "userID")
+        use_encryption = should_encrypt_response(headers_data)
+        
+        file_id = get_header(client_socket, headers_data, r'fileID:\s*(\S+)', "fileID")
+        user_id = get_header(client_socket, headers_data, r'userID:\s*(\S+)', "userID")
+        
+        # Decrypt parameters if they're AES encrypted
+        is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
+        if is_encrypted and is_encrypted.lower() == 'true':
+            file_id = rsa_manager.decryptAES(file_id, global_AES_key)
+            user_id = rsa_manager.decryptAES(user_id, global_AES_key)
         
         if not file_id or not user_id:
+            logger.error("Failed to decrypt parameters or missing parameters")
             return
         
         if not file_db.is_owner(int(file_id), int(user_id)):
             logger.error(f"User {user_id} is not owner of file {file_id}")
-            client_socket.send(ready_to_send("500 Internal Server Error", json.dumps("Not owner!!"), "application/json").encode())
+            error_data = "Not owner!!"
+            response_data = encrypt_response_data(error_data, use_encryption)
+            client_socket.send(ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json").encode())
             return
 
         logger.info(f"Deleting file {file_id}")
         file_result = file_db.delete_file(file_id)
 
         if file_result['status'] != 200:
-            response = ready_to_send(str(file_result['status']), json.dumps({"error": file_result['message']}), "application/json")
+            error_data = {"error": file_result['message']}
+            response_data = encrypt_response_data(error_data, use_encryption)
+            response = ready_to_send(str(file_result['status']), json.dumps(response_data), "application/json")
             client_socket.send(response.encode())
             return
 
         permissions_result = file_permissions_db.delete_file_permissions(file_id)
         if permissions_result['status'] != 200:
-            response = ready_to_send(str(permissions_result['status']), json.dumps({"error": permissions_result['message']}), "application/json")
+            error_data = {"error": permissions_result['message']}
+            response_data = encrypt_response_data(error_data, use_encryption)
+            response = ready_to_send(str(permissions_result['status']), json.dumps(response_data), "application/json")
             client_socket.send(response.encode())
             return
 
@@ -1070,13 +1295,16 @@ def handle_delete_file(client_socket, headers_data, PATH_TO_FOLDER):
         except Exception as e:
             logger.error(f"Error deleting file from filesystem: {str(e)}")
 
-        response = ready_to_send("200 OK", json.dumps({"message": "File deleted successfully"}), "application/json")
+        success_data = {"message": "File deleted successfully"}
+        response_data = encrypt_response_data(success_data, use_encryption)
+        response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
         client_socket.send(response.encode())
         
     except Exception as e:
         logger.error(f"Error in delete-file: {str(e)}")
-        error_response = json.dumps({"error": str(e)})
-        response = ready_to_send("500 Internal Server Error", error_response, "application/json")
+        error_data = {"error": str(e)}
+        response_data = encrypt_response_data(error_data, use_encryption)
+        response = ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json")
         client_socket.send(response.encode())
 
 
@@ -1179,7 +1407,7 @@ def start_main_server(host='127.0.0.1', port=8000):
         except Exception as e:
             logger.error(f"Error accepting connection: {str(e)}")
 
-def save_new_version(file_id, user_id, content, client_socket):
+def save_new_version(file_id, user_id, content, client_socket, use_encryption=False):
     """Save a new version of a file"""
     logger.info(f"Saving new version for file {file_id} by user {user_id}")
     
@@ -1194,10 +1422,13 @@ def save_new_version(file_id, user_id, content, client_socket):
         raise ValueError("User does not have permission to save versions")
     
     result = version_log_db.add_version(file_id, content)
-    response = ready_to_send(result['status'], json.dumps(result['message']), "application/json")
+    
+    # Encrypt response if needed
+    response_data = encrypt_response_data(result['message'], use_encryption)
+    response = ready_to_send(result['status'], json.dumps(response_data), "application/json")
     client_socket.send(response.encode())
 
-def delete_version(file_id, user_id, version, client_socket):
+def delete_version(file_id, user_id, version, client_socket, use_encryption=False):
     """Delete a specific version of a file"""
     logger.info(f"Deleting version {version} of file {file_id} for user {user_id}")
     
@@ -1212,7 +1443,10 @@ def delete_version(file_id, user_id, version, client_socket):
         raise ValueError("User does not have permission to delete versions")
     
     result = version_log_db.delete_version(version, file_id)
-    response = ready_to_send(result['status'], json.dumps(result['message']), "application/json")
+    
+    # Encrypt response if needed
+    response_data = encrypt_response_data(result['message'], use_encryption)
+    response = ready_to_send(result['status'], json.dumps(response_data), "application/json")
     client_socket.send(response.encode())
 
 def handle_global_aes(client_socket, content_length):
