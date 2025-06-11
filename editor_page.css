@@ -25,13 +25,16 @@ width: 100%; /* Full width */
 }
 
 .right-panel-container {
+  grid-column: 3;
   display: flex;
-  position: relative;
-  width: 100%;
-  margin-top: 50px;
-  border-top: 1px solid #404556;
+  flex-direction: column;
   border-left: 1px solid #404556;
+  border-top: 1px solid #404556;
+  background: var(--primary);
+  height: 100%;
+  margin-top: 50px;
 }
+
 
 .right-panel {
   flex-direction: column;
@@ -41,10 +44,9 @@ width: 100%; /* Full width */
   width: 80px;
 }
 
-
 .platform {
   display: grid;
-  grid-template-columns: 180px 1fr 80px;
+  grid-template-columns: 180px minmax(0, 1fr) 80px;
   min-height: 100vh;
 }
 
@@ -345,6 +347,13 @@ button:hover {
   transition: right 0.3s ease;
   padding: 20px;
   z-index: 1000;
+  overflow-y: auto;
+  max-height: 100vh;
+  padding-bottom: 50px;
+}
+
+#file-details-scroll, #versions-details-scroll {
+  padding-right: 10px; /* optional: for spacing away from the scrollbar */
 }
 
 #file-details.slide-in, #versions-details.slide-in {

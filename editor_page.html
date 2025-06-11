@@ -77,7 +77,6 @@
                 <button onclick="popFileInfo('V')"> 𝐕 </button>
             </div>
         </div>
-        <div class="resizer"></div>
     </div>
 </div>
 
@@ -98,29 +97,32 @@
 
 <!-- File details popup -->
 <div id="file-details" class="side-panel">
-    <h2 id="file-name">File Name: <span id="filename"></span></h2>
-  <h3>Users with Access:</h3>
-  <table id="user-table">
-      <thead>
-          <tr>
-              <th>Username</th>
-              <th>Role</th>
-          </tr>
-      </thead>
-      <tbody id="user-list">
-          <!-- User list will be added here -->
-      </tbody>
-  </table>
-  <input type="text" id="username-action" placeholder="Enter username">
-  <select id="role-action">
-    <option value="">Select role</option>
-    <option value="editor">Editor</option>
-    <option value="viewer">Viewer</option>
-  </select>
-  <button id="grant-user-btn">Grant Access</button>
-  <button id="revoke-user-btn">Revoke Access</button>
-  <button id="delete-file-btn" onclick="confirmDelete('file')">Delete File</button>
-  <button id="close-panel-D-btn">Close</button>
+    <div class="file-details-scroll">
+        <h2 id="file-name">File Name: <span id="filename"></span></h2>
+        <h3>Users with Access:</h3>
+        <table id="user-table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Role</th>
+                </tr>
+            </thead>
+            <tbody id="user-list">
+                <!-- User list will be added here -->
+            </tbody>
+        </table>
+        <input type="text" id="username-action" placeholder="Enter username">
+        <select id="role-action">
+            <option value="">Select role</option>
+            <option value="editor">Editor</option>
+            <option value="viewer">Viewer</option>
+        </select>
+        <button id="grant-user-btn">Grant Access</button>
+        <button id="revoke-user-btn">Revoke Access</button>
+        <button id="delete-file-btn" onclick="confirmDelete('file')">Delete File</button>
+        <button id="close-panel-D-btn">Close</button>
+    </div>
+    <div style="height: 50px;"></div>
 </div>
 
 <!-- Delete Confirmation Popup -->
@@ -138,25 +140,28 @@
 
 <!-- versions details popup -->
 <div id="versions-details" class="side-panel">
-  <h2 id="file-name">File Name: <span id="filename2"></span></h2>
-  <h3>Versions:</h3>
-  <table id="version-table">
-      <thead>
-          <tr>
-              <th>Version</th>
-              <th>Date</th>
-              <th>Time</th>
-          </tr>
-      </thead>
-      <tbody id="versions-list">
-          <!-- versions list will be added here -->
-      </tbody>
-  </table>
-  <input type="text" id="input-version-btn" placeholder="Choose a Version">
-  <button id="show-version-btn" onclick="showVersion()">Show Version</button>
-  <button id="delete-version-btn" onclick="confirmDelete('version')" style="display: none;">Delete Version</button>
-  <button id="save-version-btn" onclick="saveNewVersion('version')" style="display: none;">Save New Version</button>
-  <button id="close-panel-V-btn">Close</button>
+    <div class="versions-details-scroll">
+        <h2 id="file-name">File Name: <span id="filename2"></span></h2>
+        <h3>Versions:</h3>
+        <table id="version-table">
+            <thead>
+                <tr>
+                    <th>Version</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody id="versions-list">
+                <!-- versions list will be added here -->
+            </tbody>
+        </table>
+        <input type="text" id="input-version-btn" placeholder="Choose a Version">
+        <button id="show-version-btn" onclick="showVersion()">Show Version</button>
+        <button id="delete-version-btn" onclick="confirmDelete('version')" style="display: none;">Delete Version</button>
+        <button id="save-version-btn" onclick="saveNewVersion('version')" style="display: none;">Save New Version</button>
+        <button id="close-panel-V-btn">Close</button>
+    </div>
+    <div style="height: 50px;"></div>
 </div>
 
 <script src="js/editor_page.js"></script>
