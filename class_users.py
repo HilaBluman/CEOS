@@ -99,36 +99,19 @@ class RSAManager:
     def decryptAES(self, encrypted: str, aes_key: str) -> Optional[str]:
         """Decrypt message using AES"""
         try:
-            #print(f"Server AES Decryption Debug:")
-            #print(f"- Encrypted data length: {len(encrypted)}")
-            #print(f"- Encrypted data (first 50 chars): {encrypted[:50]}...")
-            #print(f"- AES key length: {len(aes_key)}")
-            
             if not aes_key:
                 raise ValueError("AES key not provided")
-                
             # Decode the base64 input
             encrypted_bytes = base64.b64decode(encrypted)
-            #print(f"- Decoded bytes length: {len(encrypted_bytes)}")
-            
-            key_bytes = base64.b64decode(aes_key)
-            #print(f"- Key bytes length: {len(key_bytes)}")
-            
+            key_bytes = base64.b64decode(aes_key)   
             # Extract IV and ciphertext
             iv = encrypted_bytes[:AES.block_size]
             ciphertext = encrypted_bytes[AES.block_size:]
             
-            #print(f"- IV length: {len(iv)} bytes")
-            #print(f"- Ciphertext length: {len(ciphertext)} bytes")
-            #print(f"- Expected IV length: {AES.block_size} bytes")
-            
             # Create cipher and decrypt
             cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
             decrypted = cipher.decrypt(ciphertext)
-            
-            #print(f"- Decrypted bytes length: {len(decrypted)}")
-            
-            # Unpad the decrypted data
+
             try:
                 unpadded_data = unpad(decrypted, AES.block_size)
                 result = unpadded_data.decode('utf-8')
@@ -171,16 +154,6 @@ class RSAManager:
         except Exception as e:
             print(f"Client RSA encryption error: {e}")
             return None
-    
-    """def decrypt_json_data(self, encrypted_data):
-        decrypted_text = self.decryptRSA(encrypted_data)
-        if decrypted_text:
-            try:
-                return json.loads(decrypted_text)
-            except json.JSONDecodeError as e:
-                print(f"JSON decode error: {e}")
-                return None
-        return None"""
 
 class UserDatabase:
     def __init__(self, db_path):
@@ -378,11 +351,12 @@ class FileInfoDatabase:
     def add_file(self, filename, ownerID):
         conn = self.get_db_connection()
         cursor = conn.cursor()
+        aes_key = RSAManager().generateAESKey() 
         
         try:
-            cursor.execute('INSERT INTO fileInfo (filename, ownerID) VALUES (?, ?)', (filename, ownerID))
+            cursor.execute('INSERT INTO fileInfo (filename, ownerID, aesKey) VALUES (?, ?, ?)', (filename, ownerID, aes_key))
             conn.commit()
-            return {'status': 201, 'message': 'File created successfully.'}
+            return {'status': 201, 'message': 'File created successfully.', 'aes_key': aes_key}
         except sqlite3.IntegrityError:
             return {'status': 409, 'message': 'File name already exists.'}
         except Exception as e:

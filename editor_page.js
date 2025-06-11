@@ -97,9 +97,7 @@ class ClientEncryption {
     decryptRSA(encrypted) {
         if (!this.isReadyClient) {throw new Error('Public client key not loaded. Call getPublicKey() first.');}
         if (encrypted == null || encrypted === '') throw new Error("Encrypted data cannot be null or empty");
-        console.log("encrypted: " + encrypted)
         const decrypted = this.cryptClient.decrypt(encrypted);
-        console.log("decrypted: " + decrypted)
         if (decrypted === null) {throw new Error('Decryption failed.');}
         return decrypted;
     }
@@ -196,9 +194,9 @@ class ClientEncryption {
 let clientRSA;
 
 // Helper function to handle encrypted responses
-function handleEncryptedResponse(data) {
-    if (data && data.encrypted && data.encrypted_data && globalAES_key) {
-        const decryptedData = clientRSA.decryptDataAES(data.encrypted_data, globalAES_key);
+function handleEncryptedResponse(data,key=globalAES_key) {
+    if (data && data.encrypted && data.encrypted_data && key) {
+        const decryptedData = clientRSA.decryptDataAES(data.encrypted_data, key);
         return JSON.parse(decryptedData);
     }
     return data;
@@ -740,6 +738,7 @@ async function saveInput(modification) {
             
             // Encrypt the modification with the file's AES key
             const encryptedModification = clientRSA.encryptDataAES(modification, file_AES_key);
+            console.log(encryptedModification)
             if (!encryptedModification) {
                 throw new Error('Failed to encrypt modification data');
             }
@@ -749,8 +748,9 @@ async function saveInput(modification) {
             headers['encrypted'] = 'true';
             
             // Also encrypt the modification in the URL
-            const encodedModification = encodeURIComponent(encryptedModification);
-            var url = "/save?modification=" + encodedModification;
+            //const encodedModification = encodeURIComponent(encryptedModification);
+            //console.log(encryptedModification)
+            var url = "/save?modification=" + encryptedModification;
         } else {
             console.log('🔓 Saving input without encryption...');
             headers['fileID'] = fileID;
@@ -1586,7 +1586,7 @@ async function deleteFile(){
         refreshFiles();
         const filePopup = document.getElementById('file-popup');
         filePopup.style.display = 'block';
-
+        file_AES_key = None;
         showNotification('File deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting file:', error);
@@ -1830,8 +1830,9 @@ async function showVersion(){
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
             console.log('🔒 Showing version with AES encryption...');
             headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
+            console.log("fileID: "  + headers['fileID'])
             headers['userID'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
-            headers['version'] = clientRSA.encryptDataAES(version, globalAES_key);
+            headers['version'] = version;
             headers['encrypted'] = 'true';
         } else {
             console.log('🔓 Showing version without encryption...');
@@ -1846,9 +1847,10 @@ async function showVersion(){
         });
 
         const rawData = await response.json();
-        const data = handleEncryptedResponse(rawData);
-        
-        console.log("data.fullContent: " + data.fullContent)
+        const data = handleEncryptedResponse(rawData,file_AES_key);
+        console.log()
+        //fullContent = clientRSA.decryptDataAES(data.fullContent,file_AES_key)
+        //console.log("data.fullContent: " + fullContent)
 
         if (data.fullContent) {
             Loadeing = true;
@@ -1861,8 +1863,8 @@ async function showVersion(){
         }
     }
     catch (error) {
-        console.error('Error saving showing version:', error);
-        showNotification('Error saving showing version', 'error');
+        console.error('Error showing version:', error);
+        showNotification('Error showing version', 'error');
     }
 }
 

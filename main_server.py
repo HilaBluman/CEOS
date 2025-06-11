@@ -45,15 +45,15 @@ def should_encrypt_response(headers_data):
     encrypted_header = re.search(r'encrypted:\s*(\S+)', headers_data)
     return bool(encrypted_header and encrypted_header.group(1).lower() == 'true')
 
-def encrypt_response_data(data, use_encryption=False):
+def encrypt_response_data(data, use_encryption=False, key = global_AES_key):
     """Encrypt response data if encryption is enabled"""
-    if use_encryption and global_AES_key:
+    if use_encryption and key:
         try:
             if isinstance(data, dict):
                 data_str = json.dumps(data)
             else:
                 data_str = str(data)
-            encrypted_data = rsa_manager.encryptAES(data_str, str(global_AES_key))
+            encrypted_data = rsa_manager.encryptAES(data_str, str(key))
             return {"encrypted_data": encrypted_data, "encrypted": True}
         except Exception as e:
             logger.error(f"Error encrypting response data: {str(e)}")
@@ -400,8 +400,12 @@ def show_version(file_id, user_id, version, client_socket, use_encryption=False)
         logger.debug(f"Version content retrieved: {fullcontent[0][:100]}...")
         data = {"fullContent": fullcontent[0]}
     
+    file_key = file_db.get_aes_key(file_id)
+    if file_key is None:
+        logger.error("No AES key found for file")
+        raise ValueError("AES key not found for the file")
     # Encrypt response if needed
-    response_data = encrypt_response_data(data, use_encryption)
+    response_data = encrypt_response_data(data, use_encryption, file_key)
     response = ready_to_send("200 OK", json.dumps(response_data), "application/json")
     client_socket.send(response.encode())
 
@@ -570,8 +574,8 @@ def handle_save_request(client_socket, headers_data, request, PATH_TO_FOLDER):
         logger.error("Failed to decrypt parameters or missing parameters")
         return
     
-    decoded_request = urllib.parse.unquote(request)
-    match1 = re.search(r'/save\?modification=([^&]+)', decoded_request)
+    #decoded_request = urllib.parse.unquote(request)
+    match1 = re.search(r'/save\?modification=([^&]+)', request)
     if not match1:
         logger.error("Modification header not found in save request")
         raise ValueError("modification header not found")
@@ -579,7 +583,7 @@ def handle_save_request(client_socket, headers_data, request, PATH_TO_FOLDER):
     try:
         # Get the encrypted modification data
         encrypted_modification = match1.group(1)
-        file_AES_key = file_db.get_aes_key(file_id)
+        file_AES_key = str(file_db.get_aes_key(file_id))
         print("file_AES_key: " + str(file_AES_key))
         if not file_AES_key:
             logger.error(f"No AES key found for file ID: {file_id}")
@@ -785,7 +789,7 @@ def handle_show_version(client_socket, headers_data):
         if isinstance(file_id, str) and isinstance(user_id, str):
             file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
             user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
-            version = rsa_manager.decryptAES(version, str(global_AES_key))
+            version = version
         else:
             logger.error("Invalid file_id or user_id type")
             return
@@ -1198,14 +1202,12 @@ def handle_save_version(client_socket, content_length, headers_data):
         # Decrypt content if it's AES encrypted
         data_json = json.loads(content)
         if data_json.get('encrypted'):
-            decrypted_content = rsa_manager.decryptAES(data_json.get('data'), str(global_AES_key))
-            data = json.loads(str(decrypted_content))
-        else:
-            data = data_json
-            
-        file_id = data.get('fileID')
-        user_id = data.get('userID')
-        content = data.get('content')
+            decrypted_content = rsa_manager.decryptAES(data_json.get('content'), str(global_AES_key))
+            data_json['content'] = decrypted_content
+        
+        file_id = data_json.get('fileID')
+        user_id = data_json.get('userID')
+        content = data_json.get('content')
         
         if not all([file_id, user_id, content]):
             raise ValueError("Missing required parameters")
