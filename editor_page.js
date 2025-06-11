@@ -450,6 +450,7 @@ const languageMap = {
     'json': 'json',
     'java': 'java',
     'c': 'c',
+    'txt' : 'txt',
     'cpp': 'cpp',
     'cs': 'csharp',
     'go': 'go',
@@ -730,7 +731,18 @@ async function saveInput(modification) {
             console.log('🔒 Saving input with AES encryption...');
             const encryptedFileID = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
             const encryptedUserID = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
-            const encryptedModification = clientRSA.encryptDataAES(modification, globalAES_key);
+            
+            // Ensure file_AES_key is properly formatted
+            if (!file_AES_key) {
+                console.error('No file AES key available');
+                throw new Error('File encryption key not available');
+            }
+            
+            // Encrypt the modification with the file's AES key
+            const encryptedModification = clientRSA.encryptDataAES(modification, file_AES_key);
+            if (!encryptedModification) {
+                throw new Error('Failed to encrypt modification data');
+            }
             
             headers['fileID'] = encryptedFileID;
             headers['userID'] = encryptedUserID;
@@ -761,7 +773,8 @@ async function saveInput(modification) {
         await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
         console.error('Error saving file:', error);
-        return
+        showNotification('Error saving file: ' + error.message, 'error');
+        return;
     }
 }
 
@@ -803,9 +816,17 @@ async function loadFile(fileId) {
             console.log('✅ File loaded successfully');
             startPolling();
         }
-        if (data.fileAESKey){
-            file_AES_key = data.fileAESKey
-            console.log('Saved file key successfully');
+        
+        if (data.fileAESKey) {
+            // Ensure the file AES key is properly formatted
+            file_AES_key = data.fileAESKey.trim();
+            if (!file_AES_key) {
+                throw new Error('Invalid file encryption key received');
+            }
+            console.log('File encryption key received and validated');
+            console.log('file_AES_key: ' + file_AES_key);
+        } else {
+            console.warn('⚠️ No file encryption key received');
         }
         
     } catch (error) {
@@ -971,9 +992,7 @@ function populateFileLists(filesInfo) {
 // Improved createNewFile function
 async function createNewFile(filename) {
     if (!hasValidExtension(filename)) {
-        filename = filename.replace(/\..*$/, '.txt');
-    } 
-    
+        return;}     
     try {
         console.log(`📝 Creating new file: ${filename}`);
         
@@ -1042,9 +1061,8 @@ async function uploadNewFile(fileContent, filename) {
         let body = {};
 
         // Check if the file extension is allowed
-        const fileExtension = filename.split('.').pop();
-        if (!languageMap[fileExtension]) {
-            throw new Error(`File extension ${fileExtension} is not allowed.`);
+        if (!hasValidExtension(filename)){
+            return;
         }
         
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
@@ -1498,7 +1516,7 @@ async function deleteVersion() {
             console.log('🔒 Deleting version with AES encryption...');
             headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
             headers['userID'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
-            headers['version'] = clientRSA.encryptDataAES(version, globalAES_key);
+            headers['version'] = clientRSA.encryptDataAES(version.toString(), globalAES_key);
             headers['encrypted'] = 'true';
         } else {
             console.log('🔓 Deleting version without encryption...');
@@ -1642,12 +1660,12 @@ async function loadFileDetails() {
 }
 
 function hasValidExtension(filename) {
-    if (!filename) return false;
-    const validExtensions = [
-        '.py', '.js', '.ts', '.html', '.css', '.json', '.java', '.c', '.cpp', '.cs', '.go', '.php', '.r', '.rb', '.sh', '.sql', '.xml', '.yaml', '.md', '.swift', '.dockerfile', '.ini', '.plaintext', '.bat', '.powershell'
-    ];
-    const extension = filename.substring(filename.lastIndexOf('.'));
-    return validExtensions.includes(extension.toLowerCase());
+    const fileExtension = filename.split('.').pop();
+    if (!languageMap[fileExtension]) {
+        showNotification(`File extension ${fileExtension} is not allowed.`,'error')
+        throw new Error(`File extension ${fileExtension} is not allowed.`);
+    }
+    return fileExtension;
 }
 
 async function accessUser(usernameInput, request, roleInput) {
@@ -1793,7 +1811,7 @@ async function saveNewVersion() {
         const rawData = await response.json();
         const data = handleEncryptedResponse(rawData);
             
-        showNotification(data, 'success');
+        showNotification(data['message'], 'success');
         loadVersionDetails();
 
     } catch (error) {

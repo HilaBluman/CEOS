@@ -172,7 +172,7 @@ class RSAManager:
             print(f"Client RSA encryption error: {e}")
             return None
     
-    def decrypt_json_data(self, encrypted_data):
+    """def decrypt_json_data(self, encrypted_data):
         decrypted_text = self.decryptRSA(encrypted_data)
         if decrypted_text:
             try:
@@ -180,7 +180,7 @@ class RSAManager:
             except json.JSONDecodeError as e:
                 print(f"JSON decode error: {e}")
                 return None
-        return None
+        return None"""
 
 class UserDatabase:
     def __init__(self, db_path):
@@ -309,12 +309,13 @@ class FileInfoDatabase:
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
-        # Create fileInfo table
+        # Create fileInfo table with aesKey column
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS fileInfo (
                 fileID INTEGER UNIQUE PRIMARY KEY,
                 filename TEXT NOT NULL,
                 ownerID INTEGER,
+                aesKey TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (ownerID) REFERENCES users(userID)

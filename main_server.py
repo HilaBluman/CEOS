@@ -27,14 +27,23 @@ file_db = FileInfoDatabase(DB_PATH)
 change_log_db = ChangeLogDatabase(DB_PATH)
 version_log_db = VersionDatabase(DB_PATH)
 rsa_manager = RSAManager()
-global_AES_key = rsa_manager.generateAESKey()
+
+# Initialize global AES key at module level
+global_AES_key = None
+try:
+    global_AES_key = str(rsa_manager.generateAESKey())
+    if not global_AES_key:
+        raise RuntimeError("Failed to generate AES key")
+except Exception as e:
+    logger.error(f"Failed to initialize encryption: {str(e)}")
+    raise RuntimeError("Failed to initialize encryption")
 
 logger.info("Database connections initialized")
 
 def should_encrypt_response(headers_data):
     """Check if the request indicates AES encryption should be used"""
     encrypted_header = re.search(r'encrypted:\s*(\S+)', headers_data)
-    return encrypted_header and encrypted_header.group(1).lower() == 'true'
+    return bool(encrypted_header and encrypted_header.group(1).lower() == 'true')
 
 def encrypt_response_data(data, use_encryption=False):
     """Encrypt response data if encryption is enabled"""
@@ -44,7 +53,7 @@ def encrypt_response_data(data, use_encryption=False):
                 data_str = json.dumps(data)
             else:
                 data_str = str(data)
-            encrypted_data = rsa_manager.encryptAES(data_str, global_AES_key)
+            encrypted_data = rsa_manager.encryptAES(data_str, str(global_AES_key))
             return {"encrypted_data": encrypted_data, "encrypted": True}
         except Exception as e:
             logger.error(f"Error encrypting response data: {str(e)}")
@@ -229,7 +238,7 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
     # Check if the user ID is AES encrypted
     is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
     if is_encrypted and is_encrypted.lower() == 'true':
-        decrypted_user_id = rsa_manager.decryptAES(user_id, global_AES_key)
+        decrypted_user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
     else:
         decrypted_user_id = rsa_manager.decryptRSA(user_id)
 
@@ -244,7 +253,7 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
     
     # Check if the filename is AES encrypted
     if is_encrypted and is_encrypted.lower() == 'true':
-        decrypted_filename = rsa_manager.decryptAES(filename, global_AES_key)
+        decrypted_filename = rsa_manager.decryptAES(filename, str(global_AES_key))
     else:
         decrypted_filename = rsa_manager.decryptRSA(filename)
 
@@ -397,7 +406,7 @@ def show_version(file_id, user_id, version, client_socket, use_encryption=False)
     client_socket.send(response.encode())
 
 
-def save_modification(client_socket, file_id, file_name, file_path, match1, user_id):
+def save_modification(client_socket, file_id, file_name, file_path, modification_data, user_id):
     """Save file modifications"""
     logger.info(f"Saving modification for file {file_id} by user {user_id}")
     
@@ -407,37 +416,59 @@ def save_modification(client_socket, file_id, file_name, file_path, match1, user
             client_socket.send(ready_to_send("200 OK", "File does not exist in database", "text/plain").encode())
         else:
             client_socket.send(ready_to_send("200 OK", "File does not exist in path", "text/plain").encode())
-    elif file_name == "File not found":
+        return
+        
+    if file_name == "File not found":
         logger.error(f"File {file_id} not found in database")
         client_socket.send(ready_to_send("200 OK", "File does not exist in database", "text/plain").encode())
-    else:
-        modification_data = urllib.parse.unquote(match1.group(1))
+        return
+        
+    try:
+        # Get the modification data from the match object
+        logger.debug(f"Modification data: {modification_data}")
+        
+        # Parse the modification data
         try:
             modification = json.loads(modification_data)
-            logger.debug(f"Modification data: {modification}")
-
-            content = modification['content']
-            
-            try:
-                modification['action'] = modify_file(
-                    modification['row'], 
-                    modification['action'], 
-                    content, 
-                    file_path, 
-                    modification['linesLength']
-                )
-                msg = "File modified successfully."
-                if modification['action'] in ["paste", "update delete row below"]:
-                    content = content + "\n"
-                change_log_db.add_modification(file_id, modification, user_id)
-                logger.info("Modification saved successfully")
-            except Exception as e:
-                msg = f"Error modifying file: {str(e)}"
-                logger.error(msg)
-            
-            client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
         except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {e}")
+            logger.error(f"Invalid JSON in modification data: {e}")
+            client_socket.send(ready_to_send("400 Bad Request", "Invalid modification data format", "text/plain").encode())
+            return
+            
+        # Validate required fields
+        required_fields = ['content', 'row', 'action', 'linesLength']
+        missing_fields = [field for field in required_fields if field not in modification]
+        if missing_fields:
+            logger.error(f"Missing required fields in modification data: {missing_fields}")
+            client_socket.send(ready_to_send("400 Bad Request", f"Missing required fields: {', '.join(missing_fields)}", "text/plain").encode())
+            return
+            
+        content = modification['content']
+        
+        try:
+            modification['action'] = modify_file(
+                modification['row'], 
+                modification['action'], 
+                content, 
+                file_path, 
+                modification['linesLength']
+            )
+            msg = "File modified successfully."
+            if modification['action'] in ["paste", "update delete row below"]:
+                content = content + "\n"
+            change_log_db.add_modification(file_id, modification, user_id)
+            logger.info("Modification saved successfully")
+        except Exception as e:
+            msg = f"Error modifying file: {str(e)}"
+            logger.error(msg)
+            client_socket.send(ready_to_send("500 Internal Server Error", msg, "text/plain").encode())
+            return
+        
+        client_socket.send(ready_to_send("200 OK", msg, "text/plain").encode())
+        
+    except Exception as e:
+        logger.error(f"Error processing modification: {str(e)}")
+        client_socket.send(ready_to_send("500 Internal Server Error", str(e), "text/plain").encode())
 
 
 # GET request handlers
@@ -461,9 +492,9 @@ def handle_poll_updates(client_socket, headers_data):
             
             # Decrypt the headers
             try:
-                fileID = rsa_manager.decryptAES(fileID_encrypted, global_AES_key)
-                lastModID = rsa_manager.decryptAES(lastModID_encrypted, global_AES_key)
-                userID = rsa_manager.decryptAES(userID_encrypted, global_AES_key)
+                fileID = rsa_manager.decryptAES(fileID_encrypted, str(global_AES_key))
+                lastModID = rsa_manager.decryptAES(lastModID_encrypted, str(global_AES_key))
+                userID = rsa_manager.decryptAES(userID_encrypted, str(global_AES_key))
                 
                 if not fileID or not lastModID or not userID:
                     logger.error("Failed to decrypt poll-updates headers")
@@ -514,22 +545,60 @@ def handle_save_request(client_socket, headers_data, request, PATH_TO_FOLDER):
     """Handle file save requests"""
     logger.info("Handling save request")
     
+    if not global_AES_key:
+        logger.error("Global AES key not available")
+        client_socket.send(ready_to_send("500 Internal Server Error", "Server encryption error", "text/plain").encode())
+        return
+    
+    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\S+)', "fileID")
+    user_id = get_header(client_socket, headers_data, r'userID:\s*(\S+)', "userID")
+    
+    if not file_id or not user_id:
+        return
+
+    # Check if the values are AES encrypted
+    is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
+    if is_encrypted and is_encrypted.lower() == 'true':
+        if isinstance(file_id, str) and isinstance(user_id, str):
+            file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
+            user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
+        else:
+            logger.error("Invalid file_id or user_id type")
+            return
+    
+    if not file_id or not user_id:
+        logger.error("Failed to decrypt parameters or missing parameters")
+        return
+    
     decoded_request = urllib.parse.unquote(request)
     match1 = re.search(r'/save\?modification=([^&]+)', decoded_request)
     if not match1:
         logger.error("Modification header not found in save request")
         raise ValueError("modification header not found")
     
-    file_id = get_header(client_socket, headers_data, r'fileID:\s*(\d+)', "fileID")
-    user_id = get_header(client_socket, headers_data, r'userID:\s*(\d+)', "userID")
-    
-    if not file_id or not user_id:
+    try:
+        # Get the encrypted modification data
+        encrypted_modification = match1.group(1)
+        file_AES_key = file_db.get_aes_key(file_id)
+        print("file_AES_key: " + str(file_AES_key))
+        if not file_AES_key:
+            logger.error(f"No AES key found for file ID: {file_id}")
+            client_socket.send(ready_to_send("404 Not Found", "No AES key found for file", "text/plain").encode())
+            return
+        # Decrypt the modification data
+        modification = rsa_manager.decryptAES(encrypted_modification, str(file_AES_key))
+        if not modification:
+            raise ValueError("Failed to decrypt modification data")
+            
+    except Exception as e:
+        logger.error(f"Error decrypting modification data: {str(e)}")
+        client_socket.send(ready_to_send("400 Bad Request", "Failed to decrypt modification data", "text/plain").encode())
         return
-    
+
     file_name = file_db.get_filename_by_id(file_id)['filename']
     file_path = PATH_TO_FOLDER + "/uploads/" + file_name
     
-    save_modification(client_socket, file_id, file_name, file_path, match1, user_id)
+    save_modification(client_socket, file_id, file_name, file_path, modification, user_id)
 
 
 def handle_file_details(client_socket, headers_data):
@@ -546,7 +615,11 @@ def handle_file_details(client_socket, headers_data):
         # Decrypt file_id if it's AES encrypted
         is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
         if is_encrypted and is_encrypted.lower() == 'true':
-            file_id = rsa_manager.decryptAES(file_id, global_AES_key)
+            if isinstance(file_id, str):
+                file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
+            else:
+                logger.error("Invalid file_id type")
+                return
         
         if not file_id:
             logger.error("Failed to decrypt file ID")
@@ -599,17 +672,21 @@ def handle_user_files(client_socket, headers_data):
             
         if is_encrypted and is_encrypted.lower() == 'true':
             logger.info("Decrypting AES encrypted user ID")
-            try:
-                # Decrypt the AES encrypted user ID
-                decrypted_user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
-                if not decrypted_user_id:
-                    raise ValueError("Failed to decrypt user ID")
-            except Exception as e:
-                logger.error(f"Error decrypting user ID: {str(e)}")
-                error_data = {'error': 'Failed to decrypt user ID'}
-                response_data = encrypt_response_data(error_data, use_encryption)
-                response = ready_to_send("400 Bad Request", json.dumps(response_data), "application/json")
-                client_socket.send(response.encode())
+            if isinstance(user_id, str):
+                try:
+                    # Decrypt the AES encrypted user ID
+                    decrypted_user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
+                    if not decrypted_user_id:
+                        raise ValueError("Failed to decrypt user ID")
+                except Exception as e:
+                    logger.error(f"Error decrypting user ID: {str(e)}")
+                    error_data = {'error': 'Failed to decrypt user ID'}
+                    response_data = encrypt_response_data(error_data, use_encryption)
+                    response = ready_to_send("400 Bad Request", json.dumps(response_data), "application/json")
+                    client_socket.send(response.encode())
+                    return
+            else:
+                logger.error("Invalid user_id type")
                 return
         else:
             logger.info("Using unencrypted user ID")
@@ -660,7 +737,11 @@ def handle_version_details(client_socket, headers_data):
         # Decrypt file_id if it's AES encrypted
         is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
         if is_encrypted and is_encrypted.lower() == 'true':
-            file_id = rsa_manager.decryptAES(file_id, global_AES_key)
+            if isinstance(file_id, str):
+                file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
+            else:
+                logger.error("Invalid file_id type")
+                return
         
         if not file_id:
             logger.error("Failed to decrypt file ID")
@@ -701,9 +782,13 @@ def handle_show_version(client_socket, headers_data):
     # Decrypt parameters if they're AES encrypted
     is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
     if is_encrypted and is_encrypted.lower() == 'true':
-        file_id = rsa_manager.decryptAES(file_id, global_AES_key)
-        user_id = rsa_manager.decryptAES(user_id, global_AES_key)
-        version = rsa_manager.decryptAES(version, global_AES_key)
+        if isinstance(file_id, str) and isinstance(user_id, str):
+            file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
+            user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
+            version = rsa_manager.decryptAES(version, str(global_AES_key))
+        else:
+            logger.error("Invalid file_id or user_id type")
+            return
     
     if not file_id or not user_id or not version:
         logger.error("Failed to decrypt parameters")
@@ -727,8 +812,12 @@ def handle_viewer_status(client_socket, headers_data):
     # Decrypt parameters if they're AES encrypted
     is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
     if is_encrypted and is_encrypted.lower() == 'true':
-        file_id = rsa_manager.decryptAES(file_id, global_AES_key)
-        user_id = rsa_manager.decryptAES(user_id, global_AES_key)
+        if isinstance(file_id, str) and isinstance(user_id, str):
+            file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
+            user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
+        else:
+            logger.error("Invalid file_id or user_id type")
+            return
     
     if not file_id or not user_id:
         logger.error("Failed to decrypt parameters")
@@ -765,7 +854,7 @@ def handle_load_file(client_socket, headers_data, PATH_TO_FOLDER):
         # Check if the file ID is AES encrypted
         is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
         if is_encrypted and is_encrypted.lower() == 'true':
-            decrypted_file_id = rsa_manager.decryptAES(fileId, global_AES_key)
+            decrypted_file_id = rsa_manager.decryptAES(fileId, str(global_AES_key))
         else:
             decrypted_file_id = rsa_manager.decryptRSA(fileId)
 
@@ -1056,8 +1145,8 @@ def handle_user_permissions(client_socket, content_length, headers_data, request
         try:
             body_data = json.loads(body)
             if body_data.get('encrypted'):
-                decrypted_body = rsa_manager.decryptAES(body_data.get('data'), global_AES_key)
-                data = json.loads(decrypted_body)
+                decrypted_body = rsa_manager.decryptAES(body_data.get('data'), str(global_AES_key))
+                data = json.loads(str(decrypted_body))
             else:
                 data = body_data
         except Exception as e:
@@ -1109,8 +1198,8 @@ def handle_save_version(client_socket, content_length, headers_data):
         # Decrypt content if it's AES encrypted
         data_json = json.loads(content)
         if data_json.get('encrypted'):
-            decrypted_content = rsa_manager.decryptAES(data_json.get('data'), global_AES_key)
-            data = json.loads(decrypted_content)
+            decrypted_content = rsa_manager.decryptAES(data_json.get('data'), str(global_AES_key))
+            data = json.loads(str(decrypted_content))
         else:
             data = data_json
             
@@ -1150,7 +1239,7 @@ def handle_upload_file(client_socket, content_length, headers_data, PATH_TO_FOLD
         # Decrypt content if it's AES encrypted
         content_json = json.loads(content)
         if content_json.get('encrypted'):
-            decrypted_content = rsa_manager.decryptAES(content_json.get('content'), global_AES_key)
+            decrypted_content = rsa_manager.decryptAES(content_json.get('content'), str(global_AES_key))
             content_json['content'] = decrypted_content
         
         new_file(client_socket, PATH_TO_FOLDER, headers_data, content_json['content'])
@@ -1213,9 +1302,13 @@ def handle_delete_version(client_socket, headers_data):
         # Decrypt parameters if they're AES encrypted
         is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
         if is_encrypted and is_encrypted.lower() == 'true':
-            file_id = rsa_manager.decryptAES(file_id, global_AES_key)
-            user_id = rsa_manager.decryptAES(user_id, global_AES_key)
-            version = rsa_manager.decryptAES(version, global_AES_key)
+            if isinstance(file_id, str) and isinstance(user_id, str) and  isinstance(version, str):
+                file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
+                user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
+                version = rsa_manager.decryptAES(version, str(global_AES_key))
+            else:
+                logger.error("Invalid file_id or user_id type")
+                return
         
         if not file_id or not user_id or not version:
             logger.error("Failed to decrypt parameters or missing parameters")
@@ -1254,8 +1347,12 @@ def handle_delete_file(client_socket, headers_data, PATH_TO_FOLDER):
         # Decrypt parameters if they're AES encrypted
         is_encrypted = get_header(client_socket, headers_data, r'encrypted:\s*(\S+)', "encrypted")
         if is_encrypted and is_encrypted.lower() == 'true':
-            file_id = rsa_manager.decryptAES(file_id, global_AES_key)
-            user_id = rsa_manager.decryptAES(user_id, global_AES_key)
+            if isinstance(file_id, str) and isinstance(user_id, str):
+                file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
+                user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
+            else:
+                logger.error("Invalid file_id or user_id type")
+                return
         
         if not file_id or not user_id:
             logger.error("Failed to decrypt parameters or missing parameters")
@@ -1322,7 +1419,6 @@ def handle_delete_requests(client_socket, request, headers_data, PATH_TO_FOLDER)
 
 
 def handle_client(client_socket, client_address, num_thread):
-    """Main client handler - now modularized into smaller functions"""
     PATH_TO_FOLDER = r"/Users/hila/CEOs"
     FORBIDDEN = {f"{PATH_TO_FOLDER}/status_code/404.png", f"{PATH_TO_FOLDER}/status_code/life.txt",
                  f"{PATH_TO_FOLDER}/status_code/500.png"}
@@ -1349,7 +1445,10 @@ def handle_client(client_socket, client_address, num_thread):
             # Log non-polling requests with cleaner format
             if "/poll-updates" not in request:
                 method = action.strip()
-                logger.info(f"{client_ip} → {method} {request}")
+                # Extract the path and query parameters
+                request_parts = request.split('?', 1)
+                path = request_parts[0]
+                logger.info(f"{client_ip} → {method} {path}")
 
             # Route requests to appropriate handlers
             if action == "GET ":
@@ -1424,7 +1523,7 @@ def save_new_version(file_id, user_id, content, client_socket, use_encryption=Fa
     result = version_log_db.add_version(file_id, content)
     
     # Encrypt response if needed
-    response_data = encrypt_response_data(result['message'], use_encryption)
+    response_data = encrypt_response_data({"message": result['message']}, use_encryption)
     response = ready_to_send(result['status'], json.dumps(response_data), "application/json")
     client_socket.send(response.encode())
 
@@ -1445,7 +1544,7 @@ def delete_version(file_id, user_id, version, client_socket, use_encryption=Fals
     result = version_log_db.delete_version(version, file_id)
     
     # Encrypt response if needed
-    response_data = encrypt_response_data(result['message'], use_encryption)
+    response_data = encrypt_response_data({"message": result['message']}, use_encryption)
     response = ready_to_send(result['status'], json.dumps(response_data), "application/json")
     client_socket.send(response.encode())
 
