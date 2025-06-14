@@ -74,13 +74,7 @@ def handle_404(client_socket):
         with open(r"/Users/hila/CEOs/status_code/404.png", "rb") as file3:
             photo = file3.read()
             file_type = "image/png"
-            # Encrypt the image data
-            encrypted_data = rsa_manager.encryptAES(photo, str(global_AES_key))
-            response_data = {
-                "encrypted_data": encrypted_data,
-                "encrypted": True
-            }
-            response = ready_to_send("404 Not Found", json.dumps(response_data), "application/json")
+            response = ready_to_send("404 Not Found", photo, file_type)
             client_socket.send(response)
         logger.debug("404 response sent successfully")
     except Exception as e:
@@ -94,13 +88,7 @@ def handle_403(client_socket):
         with open(r"/Users/hila/CEOs/status_code/403.webp", "rb") as file3:
             photo = file3.read()
             file_type = "image/webp"
-            # Encrypt the image data
-            encrypted_data = rsa_manager.encryptAES(photo, str(global_AES_key))
-            response_data = {
-                "encrypted_data": encrypted_data,
-                "encrypted": True
-            }
-            response = ready_to_send("403 Forbidden", json.dumps(response_data), "application/json")
+            response = ready_to_send("403 Forbidden", photo, file_type)
             client_socket.send(response)
         logger.debug("403 response sent successfully")
     except Exception as e:
@@ -114,13 +102,7 @@ def handle_500(client_socket):
         with open(r"/Users/hila/CEOs/status_code/500.png", "rb") as file3:
             photo = file3.read()
             file_type = "image/png"
-            # Encrypt the image data
-            encrypted_data = rsa_manager.encryptAES(photo, str(global_AES_key))
-            response_data = {
-                "encrypted_data": encrypted_data,
-                "encrypted": True
-            }
-            response = ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json")
+            response = ready_to_send("500 Internal Server Error", photo, file_type)
             client_socket.send(response)
         logger.debug("500 response sent successfully")
     except BrokenPipeError:
@@ -130,8 +112,8 @@ def handle_500(client_socket):
 
 
 def file_forbidden(file_path, forbidden):
-    """Check if file path is in forbidden list"""
-    is_forbidden = file_path in forbidden
+    """Check if file path is in forbidden list or contains Archive"""
+    is_forbidden = file_path in forbidden or "/Archive" in file_path
     logger.debug(f"Forbidden check for {file_path}: {is_forbidden}")
     return is_forbidden
 
@@ -309,12 +291,13 @@ def new_file(client_socket, PATH_TO_FOLDER, headers_data, value=""):
             file_id = file_db.check_file_exists(decrypted_user_id, decrypted_filename)
             logger.debug(f"File ID: {file_id}")
             
-            result = file_permissions_db.grant_access(file_id, decrypted_user_id, "owner")
-            logger.info(f"Owner access granted, result: {result['status']} - {result['message']}")
+            result2 = file_permissions_db.grant_access(file_id, decrypted_user_id, "owner")
+            logger.info(f"Owner access granted, result: {result2['status']} - {result2['message']}")
 
             data = {
                 "success": "File created successfully",
-                "fileId": file_id
+                "fileId": file_id,
+                "fileAESKey": result['aes_key']
             }
         else:
             logger.error(f"File creation failed: {result['message']}")
@@ -365,6 +348,10 @@ def modify_file(row, action, content, file_path, linesLength):
             elif action == "insert" or action == "paste":
                 if action == "paste":
                     content = content.replace('\\"', '"')
+                    if linesLength == row + len(content.split("\n")):
+                        print("in paste")
+                        content = content + "\r"
+
                 logger.debug(f"Inserting at row: {row}")
                 if row >= len(lines):
                     lines.insert(row, content)
@@ -549,8 +536,27 @@ def handle_poll_updates(client_socket, headers_data):
             return
         
         updates = change_log_db.get_changes_for_user(fileID, lastModID, userID)
+        
+        # Get file AES key for encryption
+        file_key = file_db.get_aes_key(fileID)
+        if not file_key:
+            logger.error("No AES key found for file")
+            return
+            
         if updates:
-            response = ready_to_send("200 OK", json.dumps(updates), content_type="application/json")
+            # Encrypt the updates if encryption is enabled
+            if is_encrypted:
+                try:
+                    # Ensure updates is a valid JSON string before encryption
+                    updates_json = json.dumps(updates)
+                    response_data = encrypt_response_data(updates_json, True, file_key)
+                    logger.debug(f"Encrypted response data: {response_data}")
+                except Exception as e:
+                    logger.error(f"Error encrypting updates: {str(e)}")
+                    return
+            else:
+                response_data = updates
+            response = ready_to_send("200 OK", json.dumps(response_data), content_type="application/json")
         else:
             response = ready_to_send("200 OK", json.dumps("No updates"), content_type="application/json")
         
@@ -807,7 +813,8 @@ def handle_show_version(client_socket, headers_data):
     if is_encrypted and is_encrypted.lower() == 'true':
         if isinstance(file_id, str) and isinstance(user_id, str):
             file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
-            user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
+            aes_key = file_db.get_aes_key(file_id)
+            user_id = rsa_manager.decryptAES(user_id, str(aes_key))
             version = version
         else:
             logger.error("Invalid file_id or user_id type")
@@ -837,7 +844,8 @@ def handle_viewer_status(client_socket, headers_data):
     if is_encrypted and is_encrypted.lower() == 'true':
         if isinstance(file_id, str) and isinstance(user_id, str):
             file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
-            user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
+            aes_key = file_db.get_aes_key(file_id)
+            user_id = rsa_manager.decryptAES(user_id, str(aes_key))
         else:
             logger.error("Invalid file_id or user_id type")
             return
@@ -1008,7 +1016,7 @@ def handle_static_files(client_socket, request, PATH_TO_FOLDER, FORBIDDEN):
         handle_404(client_socket)
     else:
         request, file_type = find_file_type(request)
-        logger.info(f"Serving file: {request}, type: {file_type}")  # Fixed: show file_type
+        logger.info(f"Serving file: {request}, type: {file_type}")
 
         if "imgs/" in request:
             try:
@@ -1176,16 +1184,18 @@ def handle_user_permissions(client_socket, content_length, headers_data, request
     userID = user_db.get_user_id(username)
     fileID = data.get('fileID')
     role = data.get('role')
-    ownerID = get_header(client_socket, headers_data, r'ownerID:\s*(\d+)', "ownerID")
+    ownerID_encrypted = data.get('ownerID_encrypted')
+    aes_key = file_db.get_aes_key(fileID) 
+    ownerID = rsa_manager.decryptAES(str(ownerID_encrypted), str(aes_key))
 
     if not userID:
         logger.error(f"User not found: {username}")
-        error_data = "Not a user!!"
+        error_data = {"message": "Not a user!!"}
         response_data = encrypt_response_data(error_data, use_encryption)
         client_socket.send(ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json"))
     elif not ownerID or not file_db.is_owner(int(fileID), int(ownerID)):
         logger.error(f"Permission denied: User {ownerID} is not owner of file {fileID}")
-        error_data = "Not owner!!"
+        error_data = {"message": "Not owner!!"}
         response_data = encrypt_response_data(error_data, use_encryption)
         client_socket.send(ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json"))
     else:
@@ -1211,16 +1221,25 @@ def handle_save_version(client_socket, content_length, headers_data):
         content = get_content_of_upload(client_socket, content_length)
         if not content:
             raise ValueError("No content received")
-        
-        # Decrypt content if it's AES encrypted
+
         data_json = json.loads(content)
         if data_json.get('encrypted'):
-            decrypted_content = rsa_manager.decryptAES(data_json.get('content'), str(global_AES_key))
-            data_json['content'] = decrypted_content
+            encrypted_data = data_json.get('data')
+            if not encrypted_data:
+                raise ValueError("No encrypted data received")
+            
+            # Decrypt the data using global AES key
+            decrypted_data = rsa_manager.decryptAES(encrypted_data, str(global_AES_key))
+            if not decrypted_data:
+                raise ValueError("Failed to decrypt data")
+            
+            data_json = json.loads(decrypted_data)
         
         file_id = data_json.get('fileID')
-        user_id = data_json.get('userID')
-        content = data_json.get('content')
+        aes_key = file_db.get_aes_key(str(file_id))
+        user_id = str(rsa_manager.decryptAES(data_json.get('userID_encrpted'),str(aes_key)))
+        content = str(rsa_manager.decryptAES(data_json.get('content'),str(aes_key)))
+        print("user: " + user_id)
         
         if not all([file_id, user_id, content]):
             raise ValueError("Missing required parameters")
@@ -1241,8 +1260,11 @@ def handle_save_version(client_socket, content_length, headers_data):
         response = ready_to_send("400 Bad Request", json.dumps(response_data), "application/json")
         client_socket.send(response)
     except Exception as e:
-        logger.error(f"Unexpected error in save version request: {str(e)}")
-        handle_500(client_socket)
+        logger.error(f"Error saving new version: {str(e)}")
+        error_data = {"error": "Internal server error"}
+        response_data = encrypt_response_data(error_data, use_encryption)
+        response = ready_to_send("500 Internal Server Error", json.dumps(response_data), "application/json")
+        client_socket.send(response)
 
 
 def handle_upload_file(client_socket, content_length, headers_data, PATH_TO_FOLDER):
@@ -1319,8 +1341,9 @@ def handle_delete_version(client_socket, headers_data):
         if is_encrypted and is_encrypted.lower() == 'true':
             if isinstance(file_id, str) and isinstance(user_id, str) and  isinstance(version, str):
                 file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
-                user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
-                version = rsa_manager.decryptAES(version, str(global_AES_key))
+                aes_key = file_db.get_aes_key(file_id)
+                user_id = rsa_manager.decryptAES(user_id, str(aes_key))
+                version = version
             else:
                 logger.error("Invalid file_id or user_id type")
                 return
@@ -1364,7 +1387,8 @@ def handle_delete_file(client_socket, headers_data, PATH_TO_FOLDER):
         if is_encrypted and is_encrypted.lower() == 'true':
             if isinstance(file_id, str) and isinstance(user_id, str):
                 file_id = rsa_manager.decryptAES(file_id, str(global_AES_key))
-                user_id = rsa_manager.decryptAES(user_id, str(global_AES_key))
+                aes_key = file_db.get_aes_key(file_id)
+                user_id = rsa_manager.decryptAES(user_id, str(aes_key))
             else:
                 logger.error("Invalid file_id or user_id type")
                 return
@@ -1391,6 +1415,14 @@ def handle_delete_file(client_socket, headers_data, PATH_TO_FOLDER):
             return
 
         permissions_result = file_permissions_db.delete_file_permissions(file_id)
+        try:
+            change_result = change_log_db.delete_file_changes(file_id)
+            if change_result['staus'] == 200:
+                logger.info(change_result['message'])
+            else:
+                 logger.error(change_result['message'])
+        except:
+            logger.error("Failed to delete file changes")
         if permissions_result['status'] != 200:
             error_data = {"error": permissions_result['message']}
             response_data = encrypt_response_data(error_data, use_encryption)
@@ -1435,8 +1467,19 @@ def handle_delete_requests(client_socket, request, headers_data, PATH_TO_FOLDER)
 
 def handle_client(client_socket, client_address, num_thread):
     PATH_TO_FOLDER = r"/Users/hila/CEOs"
-    FORBIDDEN = {f"{PATH_TO_FOLDER}/status_code/404.png", f"{PATH_TO_FOLDER}/status_code/life.txt",
-                 f"{PATH_TO_FOLDER}/status_code/500.png"}
+    FORBIDDEN = {
+        f"{PATH_TO_FOLDER}/status_code/404.png",
+        f"{PATH_TO_FOLDER}/status_code/life.txt",
+        f"{PATH_TO_FOLDER}/status_code/500.png",
+        f"{PATH_TO_FOLDER}/users.db",
+        f"{PATH_TO_FOLDER}/__pycache__",
+        f"{PATH_TO_FOLDER}/class_users.py",
+        f"{PATH_TO_FOLDER}/notes.txt",
+        f"{PATH_TO_FOLDER}/start_servers.py",
+        f"{PATH_TO_FOLDER}/.venv",
+        f"{PATH_TO_FOLDER}/.vscode",
+        f"{PATH_TO_FOLDER}/.idea"
+    }
 
     client_ip = client_address[0]
     client_port = client_address[1]

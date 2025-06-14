@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Code Online Editor Sharing</title>
-    <link rel="icon" href="/imgs/icon.ico" type="image/icon">
+    <link rel="icon" href="/imgs/icon.jpg" type="image/icon">
     <style>
         /* Global Styles */
         body {
@@ -253,12 +253,9 @@
                 }
             }
 
-            // Convert base64 DER to PEM format
             base64ToPem(base64Key) {
                 const pemHeader = '-----BEGIN PUBLIC KEY-----\n';
                 const pemFooter = '\n-----END PUBLIC KEY-----';
-                
-                // Add line breaks every 64 characters
                 const formatted = base64Key.match(/.{1,64}/g).join('\n');
                 return pemHeader + formatted + pemFooter;
             }

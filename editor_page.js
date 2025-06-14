@@ -146,24 +146,15 @@ class ClientEncryption {
     
     decryptDataAES(encryptedData, key) {
         try {
-            //console.log('🔓 AES Decryption Debug:');
-            //console.log('- Encrypted data:', encryptedData);
-            //console.log('- Key (base64):', key);
-            
             // Convert key from base64 to WordArray
             const keyBytes = CryptoJS.enc.Base64.parse(key);
-            //console.log('- Key bytes length:', keyBytes.words.length * 4, 'bytes');
             
             // Parse the combined data
             const combined = CryptoJS.enc.Base64.parse(encryptedData);
-            //console.log('- Combined data length:', combined.words.length * 4, 'bytes');
             
             // Extract IV (first 16 bytes) and ciphertext (rest)
             const iv = CryptoJS.lib.WordArray.create(combined.words.slice(0, 4)); // 4 words = 16 bytes
             const ciphertext = CryptoJS.lib.WordArray.create(combined.words.slice(4));
-            
-            //console.log('- Extracted IV:', CryptoJS.enc.Base64.stringify(iv));
-            //console.log('- Extracted ciphertext length:', ciphertext.words.length * 4, 'bytes');
             
             // Create cipherParams object for decryption
             const cipherParams = CryptoJS.lib.CipherParams.create({
@@ -179,7 +170,6 @@ class ClientEncryption {
             
             // Convert to UTF-8 string
             const result = decrypted.toString(CryptoJS.enc.Utf8);
-            //console.log('- Decrypted result:', result);
             
             return result;
             
@@ -194,12 +184,43 @@ class ClientEncryption {
 let clientRSA;
 
 // Helper function to handle encrypted responses
-function handleEncryptedResponse(data,key=globalAES_key) {
-    if (data && data.encrypted && data.encrypted_data && key) {
-        const decryptedData = clientRSA.decryptDataAES(data.encrypted_data, key);
-        return JSON.parse(decryptedData);
+function handleEncryptedResponse(data, key=globalAES_key) {
+    try {
+        if (!data) {
+            return null;
+        }
+
+        if (data === "No updates") {
+            return "No updates";
+        }
+
+        if (data && data.encrypted && data.encrypted_data && key) {
+            console.log('Decrypting encrypted data...');
+            const decryptedData = clientRSA.decryptDataAES(data.encrypted_data, key);
+            console.log('Decrypted data:', decryptedData);
+            
+            if (!decryptedData) {
+                console.error('Failed to decrypt data');
+                return null;
+            }
+
+            try {
+                const parsedData = JSON.parse(decryptedData);
+                console.log('Successfully parsed decrypted data');
+                return parsedData;
+            } catch (parseError) {
+                console.error('Error parsing decrypted data:', parseError);
+                console.log('Raw decrypted data:', decryptedData);
+                return null;
+            }
+        }
+
+        return data;
+    } catch (error) {
+        console.error('Error in handleEncryptedResponse:', error);
+        console.log('Raw data received:', data);
+        return null;
     }
-    return data;
 }
 
 // Improved JSEncrypt waiting function with timeout
@@ -440,32 +461,59 @@ const DEBOUNCE_DELAY = 500; // ms
 const MIN_WIDTH = 80;
 const MAX_WIDTH = window.innerWidth * 0.8;
 const languageMap = {
-    'py': 'python',
+    // Web Development
     'js': 'javascript',
+    'jsx': 'javascript',
     'ts': 'typescript',
+    'tsx': 'typescript',
     'html': 'html',
     'css': 'css',
+    'scss': 'scss',
     'json': 'json',
+    
+    // Programming Languages
+    'py': 'python',
     'java': 'java',
     'c': 'c',
-    'txt' : 'txt',
     'cpp': 'cpp',
     'cs': 'csharp',
     'go': 'go',
     'php': 'php',
-    'r': 'r',
     'rb': 'ruby',
+    'rs': 'rust',
+    'swift': 'swift',
+    'kt': 'kotlin',
+    
+    // Scripts and Shell
     'sh': 'shell',
+    'bash': 'shell',
+    'ps1': 'powershell',
+    
+    // Data and Config
     'sql': 'sql',
     'xml': 'xml',
     'yaml': 'yaml',
-    'md': 'markdown',
-    'swift': 'swift',
-    'dockerfile': 'dockerfile',
+    'yml': 'yaml',
+    'toml': 'toml',
+    'env': 'plaintext',
     'ini': 'ini',
-    'plaintext': 'plaintext',
-    'bat': 'bat',
-    'powershell': 'powershell'
+    
+    // Documentation
+    'md': 'markdown',
+    'txt': 'plaintext',
+    
+    // Build and Config Files
+    'dockerfile': 'dockerfile',
+    'Dockerfile': 'dockerfile',
+    'Makefile': 'makefile',
+    'package.json': 'json',
+    'tsconfig.json': 'json',
+    'webpack.config.js': 'javascript',
+    
+    // Other Common Formats
+    'svg': 'xml',
+    'csv': 'plaintext',
+    'log': 'plaintext'
 };
 
 // Improved initialization with better error handling
@@ -576,14 +624,18 @@ useCodeEditor((editor) => {
                 }
                 else if (isHighlighted){
                     isHighlighted = false;
-                    sendModifiction(endLineNumber, startLineNumber , "delete highlighted", 0 );
-                    sendModifiction(lines[startLineNumber - 1] , startLineNumber - 1, "update", 0);
+                    console.log(endLineNumber)
+                    console.log(startLineNumber)
+                    console.log(lines.length )
+                    sendModifiction(endLineNumber, startLineNumber, "delete highlighted", lines.length);
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    sendModifiction(lines[startLineNumber - 1] , startLineNumber - 1, "update", lines.length);
                     console.log("end of highlighted")
                 }
                 else if (isEnter){
                     isEnter = false;
                     if (lines[startLineNumber] === ""){
-                        sendModifiction("",startLineNumber, "insert", lines.length);
+                        sendModifiction("\r",startLineNumber, "insert", lines.length);
                     }
                     else{
                         sendModifiction(lines[startLineNumber] ,startLineNumber, "insert", lines.length);
@@ -594,14 +646,18 @@ useCodeEditor((editor) => {
                 else if (isDelete) {
                         action = 'delete same line';                 
                         lines = lines.map(line => line.replace(/\n$/, ''));
-                        if (lines[lines.length - 1] === '') {
-                            lines.pop();
+                        let lines_length = lines.length
+                        if (lines[lines_length - 1] === "/\n$/") {
+                            lines_length = lines_length - 1
+                            console.log("content: " + lines[startLineNumber - 1]);
                         }
-                        console.log(lines.length)
-                        await sendModifiction(lines[startLineNumber - 1], startLineNumber - 1, action, lines.length)
+                        console.log(lines_length)
+                        console.log("content: " + lines[startLineNumber - 1]);
+                        await sendModifiction(lines[startLineNumber - 1], startLineNumber - 1, action, lines_length)
                  } 
                 else{
-                    await sendModifiction(lines[startLineNumber - 1] , startLineNumber - 1, "update", 0);
+                    await sendModifiction(lines[startLineNumber - 1] , startLineNumber - 1, "update", lines.length);
+                    
                 }
                 
             }
@@ -631,7 +687,9 @@ async function handlePaste(event) {
     linesArray.shift();
     linesArray[linesArray.length - 1] = lastLineContent;
     const contentPaste = linesArray.join("\n");
-    await sendModifiction(contentPaste, firstLineNumber, "paste", 0);
+    const fullContent = codeEditor.getModel().getValue();
+    let lines = fullContent.split('\n');
+    await sendModifiction(contentPaste, firstLineNumber, "paste", lines.length);
     isPaste = false;
 };
 
@@ -700,7 +758,7 @@ async function onKeyZ(change, lines) {
 
     let text = changeLines.join("\n");
     sendModifiction(change.range['endLineNumber'], change.range['startLineNumber'], "delete highlighted", 0);
-    sendModifiction(text, change.range['startLineNumber'] - 1, "update", 0);
+    sendModifiction(text, change.range['startLineNumber'] - 1, "update", lines.length);
     undoTriggered = false;
 }
 
@@ -812,7 +870,13 @@ async function loadFile(fileId) {
             lastModID = data.lastModID;
             console.log("lastModID: " + lastModID);
             
-            codeEditor.setValue(data.fullContent);
+            const lines = data.fullContent.split('\n');
+            if (lines[lines.length - 1].trim() === '') {
+                lines.pop();
+            }
+            const trimmedContent = lines.join('\n');
+            codeEditor.setValue(trimmedContent);
+            
             console.log('✅ File loaded successfully');
             startPolling();
         }
@@ -861,7 +925,7 @@ async function checkViewerStatus() {
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
             console.log('🔒 Checking viewer status with AES encryption...');
             headers['fileId'] = clientRSA.encryptDataAES(selectedFileId.toString(), globalAES_key);
-            headers['userId'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
+            headers['userId'] = clientRSA.encryptDataAES(userID.toString(), file_AES_key);
             headers['encrypted'] = 'true';
         } else {
             console.log('🔓 Checking viewer status without encryption...');
@@ -970,8 +1034,8 @@ function populateFileLists(filesInfo) {
 
                 popupListItem.classList.add('selected');
                 sidebarListItem.classList.add('selected');
-                await selectFile(fileId, filename);
                 await loadFile(fileId);
+                await selectFile(fileId, filename);
                 
                 document.getElementById('file-popup').style.display = 'none';
                 document.getElementById('file-details').classList.remove('slide-in');
@@ -1039,7 +1103,9 @@ async function createNewFile(filename) {
         newFileItem.innerHTML = `📄 ${filename}`;
         newFileItem.setAttribute('data-file-id', data.fileId);
         fileTree.appendChild(newFileItem);
+        isApplyingUpdates = true;
         codeEditor.setValue('// New file');
+        isApplyingUpdates = false;
         document.getElementById('file-popup').style.display = 'none';
 
         await selectFile(data.fileId, filename);
@@ -1090,6 +1156,13 @@ async function uploadNewFile(fileContent, filename) {
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
+        if (data.fileId !== 0) {
+            fileID = data.fileId;
+        }
+        if (data.fileAESKey){
+            file_AES_key = data.fileAESKey
+            console.log('Saved file key successfully');
+        }
 
         const rawResult = await response.json();
         const result = handleEncryptedResponse(rawResult);
@@ -1101,8 +1174,11 @@ async function uploadNewFile(fileContent, filename) {
         newFileItem.innerHTML = `📄 ${filename}`;
         newFileItem.setAttribute('data-file-id', result.fileId);
         fileTree.appendChild(newFileItem);
+        isApplyingUpdates = true;
+        codeEditor.setValue(fileContent);
+        isApplyingUpdates = false;
         await selectFile(result.fileId, filename);
-        await loadFile(result.fileId);
+        //await loadFile(result.fileId);
         showNotification('File uploaded successfully!', 'success');
         
     } catch (error) {
@@ -1179,6 +1255,8 @@ function getRangeAndContent(update) {
     let range;
 
     if (action === "delete highlighted") { 
+        if (update.linesLength == update.row){
+            row = update.row}
         range = new monaco.Range(
             row,            // Convert 0-based to 1-based
             1,              // Start at beginning of line
@@ -1195,10 +1273,14 @@ function getRangeAndContent(update) {
         );
         content = "";
     } else if (action === "insert" || action === "paste") {
-            if (! content.endsWith("\n")){
+        content_length = content.split('\n').length;
+        if (update.linesLength == update.row + content_length){
+            console.log("in paste")
+            content = "\r" + content
+        }
+        else if (! content.endsWith("\n")){
                 content = content + "\n";
-            }
-
+        }
         range = new monaco.Range(
             row,  
             1,             
@@ -1232,7 +1314,7 @@ function getRangeAndContent(update) {
             row,            
             1,              
             row + 1,        
-            1               
+            content.length + 1                
         );
     }else { 
         console.log("action not acceptable.")
@@ -1286,7 +1368,9 @@ async function pollForUpdates() {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData, file_AES_key);
+        
         if (data == "No updates") {
             return;
         }
@@ -1515,8 +1599,8 @@ async function deleteVersion() {
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
             console.log('🔒 Deleting version with AES encryption...');
             headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
-            headers['userID'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
-            headers['version'] = clientRSA.encryptDataAES(version.toString(), globalAES_key);
+            headers['userID'] = clientRSA.encryptDataAES(userID.toString(), file_AES_key);
+            headers['version'] = version;
             headers['encrypted'] = 'true';
         } else {
             console.log('🔓 Deleting version without encryption...');
@@ -1553,7 +1637,7 @@ async function deleteFile(){
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
             console.log('🔒 Deleting file with AES encryption...');
             headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
-            headers['userID'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
+            headers['userID'] = clientRSA.encryptDataAES(userID.toString(), file_AES_key);
             headers['encrypted'] = 'true';
         } else {
             console.log('🔓 Deleting file without encryption...');
@@ -1574,7 +1658,9 @@ async function deleteFile(){
         const data = handleEncryptedResponse(rawData);
 
         document.getElementById('file-details').classList.remove('slide-in');
+        isApplyingUpdates = true;
         codeEditor.setValue('');
+        isApplyingUpdates = false;
     
         const currentFileTab = document.getElementById('current-file-tab');
         currentFileTab.textContent = '';
@@ -1586,7 +1672,7 @@ async function deleteFile(){
         refreshFiles();
         const filePopup = document.getElementById('file-popup');
         filePopup.style.display = 'block';
-        file_AES_key = None;
+        file_AES_key = null;
         showNotification('File deleted successfully', 'success');
     } catch (error) {
         console.error('Error deleting file:', error);
@@ -1676,21 +1762,26 @@ async function accessUser(usernameInput, request, roleInput) {
         return;
     }
 
+    // Check if the username is the same as the owner's username
+    if (username === get_username()) {
+        showNotification('You cannot grant or revoke access to yourself', 'error');
+        return;
+    }
+
     let prompt;
     if (request === "granted") {
         prompt = '/grant-user-to-file';
     } else {
         prompt = '/revoke-user-to-file';
     }
-
     try {
         let headers = {
             'Content-Type': 'application/json',
-            'ownerID': userID      //if this function is called the user is the owner - just to be safe there is a check on the server side
-        };
+               };
         
-        let body = { username, fileID, role };
-        
+        ownerID_encrypted = clientRSA.encryptDataAES(userID, file_AES_key)     //if this function is called the user is the owner - just to be safe there is a check on the server side
+        let body = { username, fileID, role, ownerID_encrypted };
+    
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
             console.log('🔒 Accessing user with AES encryption...');
             const encryptedBody = clientRSA.encryptDataAES(JSON.stringify(body), globalAES_key);
@@ -1784,8 +1875,15 @@ function showNotification(message, type = 'info') {
 
 async function saveNewVersion() {
     try {
+        const isReadOnly = codeEditor.getOption(monaco.editor.EditorOption.readOnly);
+        if (isReadOnly) {
+            showNotification("Error: Cannot save new version when editor is in read-only mode", 'error');
+            return;
+        }
         let headers = { 'Content-Type': 'application/json' };
-        let body = { fileID, userID, content: codeEditor.getValue() };
+        userID_encrpted = clientRSA.encryptDataAES(userID,file_AES_key);
+        content = clientRSA.encryptDataAES(codeEditor.getValue(),file_AES_key);
+        let body = { fileID, userID_encrpted, content};
         
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
             console.log('🔒 Saving new version with AES encryption...');
@@ -1821,7 +1919,6 @@ async function saveNewVersion() {
 }
 
 async function showVersion(){
-    isViewer = true;
     const version = document.getElementById('input-version-btn').value.trim();
     
     try {
@@ -1830,8 +1927,7 @@ async function showVersion(){
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
             console.log('🔒 Showing version with AES encryption...');
             headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
-            console.log("fileID: "  + headers['fileID'])
-            headers['userID'] = clientRSA.encryptDataAES(userID.toString(), globalAES_key);
+            headers['userID'] = clientRSA.encryptDataAES(userID.toString(), file_AES_key);
             headers['version'] = version;
             headers['encrypted'] = 'true';
         } else {
@@ -1849,18 +1945,24 @@ async function showVersion(){
         const rawData = await response.json();
         const data = handleEncryptedResponse(rawData,file_AES_key);
         console.log()
-        //fullContent = clientRSA.decryptDataAES(data.fullContent,file_AES_key)
-        //console.log("data.fullContent: " + fullContent)
 
         if (data.fullContent) {
             Loadeing = true;
             const currentFileTab = document.getElementById('current-file-tab');
 
             currentFileTab.textContent = selectedFileName + " - V" + version;
-            codeEditor.setValue(data.fullContent);
+            const lines = data.fullContent.split('\n');
+            if (lines[lines.length - 1].trim() === '') {
+                lines.pop();
+            }
+            const trimmedContent = lines.join('\n');
+            codeEditor.setValue(trimmedContent);
             setEditorReadOnly(true);  // Disable editing in viewer mode
             stopPolling()
+            showNotification('Version loaded successfully', 'success')
         }
+        if (data.error)
+            showNotification(data.error, 'error')
     }
     catch (error) {
         console.error('Error showing version:', error);
