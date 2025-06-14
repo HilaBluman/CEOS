@@ -17,7 +17,6 @@ class ClientEncryption {
         // Store keys as public properties
         this.publicKey = this.cryptClient.getPublicKey();
         this.privateKey = this.cryptClient.getPrivateKey();
-        console.log("set publicKey: " + this.publicKey)
         this.cryptClient.setPublicKey(this.publicKey);
         this.cryptClient.setPrivateKey(this.privateKey);
         this.isReadyClient = true;
@@ -71,12 +70,12 @@ class ClientEncryption {
                 const pemKey = this.base64ToPem(data.publicKey);
                 this.jsencrypt.setPublicKey(pemKey);
                 this.isReady = true;
-                console.log('Public key obtained and set successfully');
+                console.log('✅ Public key obtained and set successfully');
             }
             
             return true;
         } catch (error) {
-            console.error('Error getting public key:', error);
+            console.error('❌ Error getting public key:', error);
             this.encryptionMode = 'none';
             console.log('Falling back to no-encryption mode');
             return true; // Continue without encryption
@@ -108,34 +107,19 @@ class ClientEncryption {
 
     encryptDataAES(data, key) {
         try {
-            //console.log('🔒 AES Encryption Debug:');
-            //console.log('- Data to encrypt:', data);
-            //console.log('- Key (base64):', key);
             
-            // Convert key from base64 to WordArray
+            // Convert key from base64
             const keyBytes = CryptoJS.enc.Base64.parse(key);
-            //console.log('- Key bytes length:', keyBytes.words.length * 4, 'bytes');
-            
             // Generate random IV
-            const iv = CryptoJS.lib.WordArray.random(16); // 16 bytes = 128 bits
-            //console.log('- Generated IV:', CryptoJS.enc.Base64.stringify(iv));
-            
-            // Encrypt the data
+            const iv = CryptoJS.lib.WordArray.random(16);
             const encrypted = CryptoJS.AES.encrypt(data, keyBytes, {
                 iv: iv,
                 mode: CryptoJS.mode.CBC,
                 padding: CryptoJS.pad.Pkcs7
             });
-            
-            //console.log('- Encrypted ciphertext:', CryptoJS.enc.Base64.stringify(encrypted.ciphertext));
-            
-            // Combine IV + encrypted data and return as base64
+
             const combined = iv.concat(encrypted.ciphertext);
             const result = CryptoJS.enc.Base64.stringify(combined);
-            
-            //console.log('- Final combined result:', result);
-            //console.log('- Combined length:', result.length);
-            
             return result;
             
         } catch (error) {
@@ -146,29 +130,21 @@ class ClientEncryption {
     
     decryptDataAES(encryptedData, key) {
         try {
-            // Convert key from base64 to WordArray
+            // Convert key from base64 
             const keyBytes = CryptoJS.enc.Base64.parse(key);
-            
-            // Parse the combined data
             const combined = CryptoJS.enc.Base64.parse(encryptedData);
-            
-            // Extract IV (first 16 bytes) and ciphertext (rest)
+            // Extract IV
             const iv = CryptoJS.lib.WordArray.create(combined.words.slice(0, 4)); // 4 words = 16 bytes
             const ciphertext = CryptoJS.lib.WordArray.create(combined.words.slice(4));
-            
-            // Create cipherParams object for decryption
+
             const cipherParams = CryptoJS.lib.CipherParams.create({
                 ciphertext: ciphertext
             });
-            
-            // Decrypt the data
             const decrypted = CryptoJS.AES.decrypt(cipherParams, keyBytes, {
                 iv: iv,
                 mode: CryptoJS.mode.CBC,
                 padding: CryptoJS.pad.Pkcs7
             });
-            
-            // Convert to UTF-8 string
             const result = decrypted.toString(CryptoJS.enc.Utf8);
             
             return result;
@@ -179,9 +155,6 @@ class ClientEncryption {
         }
     }
 }
-
-// Global RSA instance
-let clientRSA;
 
 // Helper function to handle encrypted responses
 function handleEncryptedResponse(data, key=globalAES_key) {
@@ -195,9 +168,9 @@ function handleEncryptedResponse(data, key=globalAES_key) {
         }
 
         if (data && data.encrypted && data.encrypted_data && key) {
-            console.log('Decrypting encrypted data...');
+            //console.log('Decrypting encrypted data...');
             const decryptedData = clientRSA.decryptDataAES(data.encrypted_data, key);
-            console.log('Decrypted data:', decryptedData);
+            //console.log('Decrypted data:', decryptedData);
             
             if (!decryptedData) {
                 console.error('Failed to decrypt data');
@@ -206,19 +179,16 @@ function handleEncryptedResponse(data, key=globalAES_key) {
 
             try {
                 const parsedData = JSON.parse(decryptedData);
-                console.log('Successfully parsed decrypted data');
                 return parsedData;
             } catch (parseError) {
-                console.error('Error parsing decrypted data:', parseError);
-                console.log('Raw decrypted data:', decryptedData);
+                console.error('❌ Error parsing decrypted data:', parseError);
                 return null;
             }
         }
 
         return data;
     } catch (error) {
-        console.error('Error in handleEncryptedResponse:', error);
-        console.log('Raw data received:', data);
+        console.error('❌ Error in handleEncryptedResponse:', error);
         return null;
     }
 }
@@ -392,7 +362,6 @@ async function initializeEditor() {
         window.dispatchEvent(event);
         codeEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, () => {
             undoTriggered = true;
-            console.log('Undo shortcut pressed (Ctrl+Z or Cmd+Z)');
             codeEditor.trigger('keyboard', 'undo', null);
         });
         resolve();
@@ -425,20 +394,23 @@ let Loadeing = false;
 let isDelete = false;
 let isViewer = false;
 let highlightedTxt = {start: -1, end: -1, selectedText: ""}
-let pollingInterval;
+let pollingInterval = false;
+let loadingInterval = false;
 let globalAES_key;
 let file_AES_key;
-
-let fileID = 0;     // changes after pciking a file
-let userID = 0;
-let username = "";
-let lastModID = -1; 
-
 let startWidth;
 let rightPanel;
 let mainSection;
 
+let fileID = 0;     
+let userID = 0;
+let username = "";
+let lastModID = -1; 
+let selectedFileId = null;
+let selectedFileName = null;
 let undoTriggered = false;
+
+let clientRSA;
 
 function onDocumentMouseMove(e) {
     if (!isResizing) return;
@@ -619,18 +591,13 @@ useCodeEditor((editor) => {
                 let action  = "update";
 
                 if (undoTriggered){
-                    console.log("changes: " + changedText);
                     onKeyZ(change, lines);
                 }
                 else if (isHighlighted){
                     isHighlighted = false;
-                    console.log(endLineNumber)
-                    console.log(startLineNumber)
-                    console.log(lines.length )
                     sendModifiction(endLineNumber, startLineNumber, "delete highlighted", lines.length);
                     await new Promise(resolve => setTimeout(resolve, 50));
                     sendModifiction(lines[startLineNumber - 1] , startLineNumber - 1, "update", lines.length);
-                    console.log("end of highlighted")
                 }
                 else if (isEnter){
                     isEnter = false;
@@ -648,11 +615,8 @@ useCodeEditor((editor) => {
                         lines = lines.map(line => line.replace(/\n$/, ''));
                         let lines_length = lines.length
                         if (lines[lines_length - 1] === "/\n$/") {
-                            lines_length = lines_length - 1
-                            console.log("content: " + lines[startLineNumber - 1]);
+                            lines_length = lines_length - 1;
                         }
-                        console.log(lines_length)
-                        console.log("content: " + lines[startLineNumber - 1]);
                         await sendModifiction(lines[startLineNumber - 1], startLineNumber - 1, action, lines_length)
                  } 
                 else{
@@ -703,7 +667,6 @@ function get_password(){
     return sessionStorage.getItem('password');}
 function get_userID(){
     userID = sessionStorage.getItem('userId');
-    console.log(userID);
     return userID}
 
 function isTextHighlighted() {
@@ -742,17 +705,13 @@ function pageHide(event){
 }
 
 async function onKeyZ(change, lines) {
-    console.log('Undo shortcut pressed (Ctrl+Z or Cmd+Z)');
-    console.log(change)
     let changeLines = change["text"].split("\n");
     let startLine = change.range['startLineNumber'] - 1;
     let endLine = changeLines.length + startLine - 1;
     if (lines[startLine] !== ""){
-        console.log(lines[startLine]);
         changeLines[0] = lines[startLine];
     }
     if(lines[endLine] !== ""){
-        console.log(lines[endLine]);
         changeLines[changeLines.length - 1] = lines[endLine];
     }
 
@@ -773,7 +732,6 @@ async function onDocumentKeySave(event) {
 async function saveAll() {
     const code = codeEditor.getValue();
     const modification = JSON.stringify({ content: code, row: 1, action: 'saveAll', linesLength: code.split("\n").length });
-    console.log("saveAll")
     await saveInput(modification)
     Loadeing = false;
 }
@@ -790,13 +748,12 @@ async function saveInput(modification) {
             
             // Ensure file_AES_key is properly formatted
             if (!file_AES_key) {
-                console.error('No file AES key available');
+                console.error('❌ No file AES key available');
                 throw new Error('File encryption key not available');
             }
             
             // Encrypt the modification with the file's AES key
             const encryptedModification = clientRSA.encryptDataAES(modification, file_AES_key);
-            console.log(encryptedModification)
             if (!encryptedModification) {
                 throw new Error('Failed to encrypt modification data');
             }
@@ -805,9 +762,6 @@ async function saveInput(modification) {
             headers['userID'] = encryptedUserID;
             headers['encrypted'] = 'true';
             
-            // Also encrypt the modification in the URL
-            //const encodedModification = encodeURIComponent(encryptedModification);
-            //console.log(encryptedModification)
             var url = "/save?modification=" + encryptedModification;
         } else {
             console.log('🔓 Saving input without encryption...');
@@ -830,7 +784,7 @@ async function saveInput(modification) {
         const result = await response.text();
         await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
-        console.error('Error saving file:', error);
+        console.error('❌ Error saving file:', error);
         showNotification('Error saving file: ' + error.message, 'error');
         return;
     }
@@ -840,8 +794,43 @@ async function saveInput(modification) {
 async function loadFile(fileId) {
     try {
         console.log(`📂 Loading file ${fileId}...`);
+        const data = await getLoad(fileId)
         
-        let headers = { 'Connection': 'keep-alive' };
+        if (data.fullContent) {
+            Loadeing = true;
+            lastModID = data.lastModID;
+            
+            const lines = data.fullContent.split('\n');
+            if (lines[lines.length - 1].trim() === '') {
+                lines.pop();
+            }
+            const trimmedContent = lines.join('\n');
+            codeEditor.setValue(trimmedContent);
+            
+            console.log('✅ File loaded successfully');
+            fileID = fileId;
+            startPolling();
+        }
+        
+        if (data.fileAESKey) {
+            file_AES_key = data.fileAESKey.trim();
+            if (!file_AES_key) {
+                throw new Error('Invalid file encryption key received');
+            }
+            console.log('✅File encryption key received');
+        } else {
+            console.warn('⚠️ No file encryption key received');
+        }
+        
+    } catch (error) {
+        console.error('❌ Error loading file:', error);
+        showNotification('Error loading file: ' + error.message, 'error');
+    }
+}
+async function getLoad(fileId) {
+    if (!loadingInterval){
+    return {"fullContent": null};}
+    let headers = { 'Connection': 'keep-alive' };
         
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
             console.log('🔒 Loading file with AES encryption...');
@@ -861,47 +850,12 @@ async function loadFile(fileId) {
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
         const rawData = await response.json();
         const data = handleEncryptedResponse(rawData);
-        
-        if (data.fullContent) {
-            Loadeing = true;
-            lastModID = data.lastModID;
-            console.log("lastModID: " + lastModID);
-            
-            const lines = data.fullContent.split('\n');
-            if (lines[lines.length - 1].trim() === '') {
-                lines.pop();
-            }
-            const trimmedContent = lines.join('\n');
-            codeEditor.setValue(trimmedContent);
-            
-            console.log('✅ File loaded successfully');
-            fileID = fileId;
-            startPolling();
-        }
-        
-        if (data.fileAESKey) {
-            // Ensure the file AES key is properly formatted
-            file_AES_key = data.fileAESKey.trim();
-            if (!file_AES_key) {
-                throw new Error('Invalid file encryption key received');
-            }
-            console.log('File encryption key received and validated');
-            console.log('file_AES_key: ' + file_AES_key);
-        } else {
-            console.warn('⚠️ No file encryption key received');
-        }
-        
-    } catch (error) {
-        console.error('❌ Error loading file:', error);
-        showNotification('Error loading file: ' + error.message, 'error');
-    }
+        return data;
 }
 
-let selectedFileId = null;
-let selectedFileName = null;
+
 
 function selectFile(fileId, filename) {
     fileID = fileId;
@@ -947,10 +901,9 @@ async function checkViewerStatus() {
         const data = handleEncryptedResponse(rawData);
         
         isViewer = data.isViewer;
-        console.log("isViewer:", isViewer);
         setEditorReadOnly(isViewer); // Disable editing if the user is a viewer
     } catch (error) {
-        console.error('Error checking viewer status:', error);
+        console.error('❌ Error checking viewer status:', error);
         showNotification('Error checking file permissions', 'error');
     }
 }
@@ -958,7 +911,7 @@ async function checkViewerStatus() {
 
 async function getUserFiles(userId) {
     try {
-        console.log(`👤 Getting files for user ${userId}...`);
+        console.log(`👤 Getting files for user...`);
         
         let headers = {};
 
@@ -967,7 +920,6 @@ async function getUserFiles(userId) {
             const encryptedUserId = clientRSA.encryptDataAES(userId.toString(), globalAES_key);
             headers['userId'] = encryptedUserId;
             headers['encrypted'] = 'true';
-            console.log(headers)
         } else {
             console.log('🔓 Getting user files without encryption...');
             headers['userId'] = userId.toString();
@@ -1035,6 +987,7 @@ function populateFileLists(filesInfo) {
 
                 popupListItem.classList.add('selected');
                 sidebarListItem.classList.add('selected');
+                loadingInterval = true;
                 await loadFile(fileId);
                 await selectFile(fileId, filename);
                 
@@ -1050,7 +1003,7 @@ function populateFileLists(filesInfo) {
             fileTree.appendChild(sidebarListItem);
         });
     } else {
-        console.error('No files found or invalid response:', filesInfo);
+        console.error('❌ No files found or invalid response:', filesInfo);
     }
 }
 
@@ -1096,7 +1049,7 @@ async function createNewFile(filename) {
         }
         if (data.fileAESKey){
             file_AES_key = data.fileAESKey
-            console.log('Saved file key successfully');
+            console.log('✅ Saved file key successfully');
         }
 
         const fileTree = document.querySelector('.file-tree');
@@ -1162,7 +1115,7 @@ async function uploadNewFile(fileContent, filename) {
         }
         if (data.fileAESKey){
             file_AES_key = data.fileAESKey
-            console.log('Saved file key successfully');
+            console.log('✅ Saved file key successfully');
         }
 
         const rawResult = await response.json();
@@ -1179,7 +1132,6 @@ async function uploadNewFile(fileContent, filename) {
         codeEditor.setValue(fileContent);
         isApplyingUpdates = false;
         await selectFile(result.fileId, filename);
-        //await loadFile(result.fileId);
         showNotification('File uploaded successfully!', 'success');
         
     } catch (error) {
@@ -1240,7 +1192,7 @@ async function applyUpdate(update) {
         }
         
     } catch (error) {
-        console.error('Error applying partial update:', error);
+        console.error('❌ 1Error applying partial update:', error);
     }
     finally {
         isApplyingUpdates = false; 
@@ -1276,7 +1228,6 @@ function getRangeAndContent(update) {
     } else if (action === "insert" || action === "paste") {
         content_length = content.split('\n').length;
         if (update.linesLength == update.row + content_length){
-            console.log("in paste")
             content = "\r" + content
         }
         else if (! content.endsWith("\n")){
@@ -1318,7 +1269,7 @@ function getRangeAndContent(update) {
             content.length + 1                
         );
     }else { 
-        console.log("action not acceptable.")
+        console.log("❌ action not acceptable.")
     }
 
     decorations = [{
@@ -1344,7 +1295,6 @@ async function pollForUpdates() {
         
         // Check if encryption is available and AES key exists
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
-            //console.log('🔒 Polling with AES encrypted headers...');
             headers = {
                 'fileID': clientRSA.encryptDataAES(fileID.toString(), globalAES_key),
                 'userID': clientRSA.encryptDataAES(userID.toString(), globalAES_key),
@@ -1352,7 +1302,6 @@ async function pollForUpdates() {
                 'encrypted': 'true'
             };
         } else {
-            //console.log('🔓 Polling with unencrypted headers...');
             headers = {
                 'fileID': fileID.toString(),
                 'userID': userID.toString(),
@@ -1376,24 +1325,22 @@ async function pollForUpdates() {
             return;
         }
         else if (Array.isArray(data) && data.length > 0) {
-            console.log('Received updates:', data);
             for (const update of data) {
                 if(update.ModID > lastModID)
                 {
-                console.log("Applying update with ModID:", update.ModID);
                 lastModID = update.ModID;
                 await applyUpdate(update.modification);
                 }
             }
         }
         else {
-            console.log('Invalid update format received:', data);
+            console.log('❌ Invalid update format received:', data);
         }
     } catch (error) {
         if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
             console.log('Connection error during polling - will retry next interval');
         } else {
-            console.error('Error polling for updates:', error);
+            console.error('❌ Error polling for updates:', error);
         }
     } finally {
         if (pollingInterval) {
@@ -1402,16 +1349,50 @@ async function pollForUpdates() {
     }
 }
 
+async function periodicLoad() {
+    try{
+        const data = await getLoad(fileID);
+        if (data.fullContent == null){
+            return;
+        } 
+        else {
+            Loadeing = true;
+            lastModID = data.lastModID;
+            
+            const lines = data.fullContent.split('\n');
+            if (lines[lines.length - 1].trim() === '') {
+                lines.pop();
+            }
+            const trimmedContent = lines.join('\n');
+            codeEditor.setValue(trimmedContent);
+            
+            console.log('✅ File loaded successfully');
+            if (loadingInterval){
+                setTimeout(periodicLoad, 120000); 
+            }
+        }
+    }
+    catch (error) {
+        console.error('❌ Error loading file:', error);
+        showNotification('Error loading file: ' + error.message, 'error');
+    }
+}
+
 function startPolling() {
-    console.log("in start polling");
     pollingInterval = true;
+    loadingInterval = true;
     pollForUpdates();
+    periodicLoad();
 }
 
 function stopPolling() {
     if (pollingInterval) {
         clearInterval(pollingInterval);
-        pollingInterval = null;
+        pollingInterval = false;
+    }
+    if (loadingInterval){
+        clearInterval(loadingInterval);
+        loadingInterval = false;
     }
 }
 
@@ -1446,17 +1427,15 @@ function promptUploadFile() {
             }
             
             const filename = file.name;
-            console.log('Selected file:', filename);
             
             const content = await file.text();
-            console.log('File content loaded, size:', content.length);
             
             await uploadNewFile(content, filename);
             
-            console.log('File upload completed:', filename);
+            console.log('✅ File upload completed:', filename);
             showNotification('File upload completed!','success')
         } catch (error) {
-            console.error('Error during file upload:', error);
+            console.error('❌ Error during file upload:', error);
             showNotification(error.message, 'error');
         } finally {
             document.body.removeChild(fileInput);
@@ -1497,7 +1476,7 @@ function popFileInfo(popupVariation) {
         sidePanel.classList.add('open');
         loadVersionDetails(); 
     } else {
-        console.log("The popup variation does not exist!");
+        console.log("❌ The popup variation does not exist!");
     }
     document.getElementById('filename').textContent = selectedFileName;
 }
@@ -1566,7 +1545,7 @@ async function loadVersionDetails() {
             document.getElementById('versions-details').classList.remove('slide-in');}
 
     } catch (error) {
-        console.error('Error loading version details:', error);
+        console.error('❌ Error loading version details:', error);
         showNotification('Error loading version details', 'error');
     }
 }
@@ -1626,7 +1605,7 @@ async function deleteVersion() {
         showNotification('Version deleted successfully', 'success');
         loadVersionDetails(); // Refresh the versions list
     } catch (error) {
-        console.error('Error deleting version:', error);
+        console.error('❌ Error deleting version:', error);
         showNotification('Failed to delete version. Please try again.', 'error');
     }
 }
@@ -1676,7 +1655,7 @@ async function deleteFile(){
         file_AES_key = null;
         showNotification('File deleted successfully', 'success');
     } catch (error) {
-        console.error('Error deleting file:', error);
+        console.error('❌ Error deleting file:', error);
         showNotification('Failed to delete file. Please try again.', 'error');
     }
 }
@@ -1706,7 +1685,6 @@ async function loadFileDetails() {
         const rawData = await response.json();
         const data = handleEncryptedResponse(rawData);
         
-        console.log("Details data :", JSON.stringify(data));
         document.getElementById('filename').textContent = data.filename;
         const isOwner = data.owner_id === parseInt(userID);
         
@@ -1741,7 +1719,7 @@ async function loadFileDetails() {
         };
 
     } catch (error) {
-        console.error('Error loading file details:', error);
+        console.error('❌ Error loading file details:', error);
         showNotification('Error loading file details', 'error');
     }
 }
@@ -1784,7 +1762,7 @@ async function accessUser(usernameInput, request, roleInput) {
         let body = { username, fileID, role, ownerID_encrypted };
     
         if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
-            console.log('🔒 Accessing user with AES encryption...');
+            console.log('🔒 Giving access to user with AES encryption...');
             const encryptedBody = clientRSA.encryptDataAES(JSON.stringify(body), globalAES_key);
             body = {
                 data: encryptedBody,
@@ -1807,13 +1785,12 @@ async function accessUser(usernameInput, request, roleInput) {
             usernameInput.value = ''; 
             roleInput.value = '';
             loadFileDetails(); 
-        } else {
-            console.log(data);
+        } else {;
             showNotification(data.message, 'error');
         }
         
     } catch (error) {
-        console.error('Error:', error);
+        console.error('❌ Error:', error);
         showNotification(error, 'error');
     }
 }
@@ -1903,7 +1880,7 @@ async function saveNewVersion() {
         });
 
         if (!response.ok) {
-            console.log("error: " + response.json().stringify());
+            console.log("❌ error: " + response.json().stringify());
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
@@ -1914,7 +1891,7 @@ async function saveNewVersion() {
         loadVersionDetails();
 
     } catch (error) {
-        console.error('Error saving new version:', error);
+        console.error('❌ Error saving new version:', error);
         showNotification('Error saving new version', 'error');
     }
 }
@@ -1924,7 +1901,6 @@ async function showVersion(){
     
     try {
         const data = await getVersion(version);
-        console.log(data)
 
         if (data.fullContent) {
             Loadeing = true;
@@ -1945,7 +1921,7 @@ async function showVersion(){
             showNotification(data.error, 'error')
     }
     catch (error) {
-        console.error('Error showing version:', error);
+        console.error('❌ Error showing version:', error);
         showNotification('Error showing version', 'error');
     }
 }
@@ -1977,7 +1953,7 @@ async function getVersion(version) {
         return data;
     }
     catch (error) {
-        console.error('Error geting version:', error);
+        console.error('❌ Error geting version:', error);
         showNotification('Error geting version', 'error');
     }
 }
@@ -2059,27 +2035,30 @@ async function getGlobalAES() {
             throw new Error('Network response was not ok');
         }
         const data = await response.json();
-        // Assuming the server returns the AES key encrypted with the client's public RSA key
         const encryptedAESKey = data.AESKey;
-        // Decrypt the AES key using the client's private RSA key
         const decryptedAESKey = await clientRSA.decryptRSA(encryptedAESKey);
-        console.log("got global AES key: " + decryptedAESKey)
-        // Save the decrypted AES key in a global variable
         globalAES_key = decryptedAESKey;
     } catch (error) {
-        console.error('Failed to get global AES key:', error);
+        console.error('❌ Failed to get global AES key:', error);
     }
 }
 
 async function comparingFileToVersion() {
     stopPolling();
+    //stopPolling();
     setEditorReadOnly(true);
-    const currentFile = codeEditor.getValue().split('\n');
+    loadingInterval = true;
+    const data = await getLoad(fileID);
+    loadingInterval = false;
+    const currentFile = data.fullContent.split("\n");
     const versionNum = document.getElementById('input-version-btn').value.trim();
     const version = await getVersion(versionNum);
     
     if (!version || !version.fullContent) {
         showNotification('Error: Could not get version content', 'error');
+        const tab = document.getElementById('current-file-tab');
+        tab.textContent = selectedFileName || '';
+        await loadFile(selectedFileId);
         return;
     }
     
@@ -2100,7 +2079,7 @@ async function comparingFileToVersion() {
             prefix = '- ';
             className = 'diff-deleted';
         } else if (item.type === 'unchanged') {
-            prefix = '  '; // Two spaces for alignment
+            prefix = '  '; 
             className = 'diff-unchanged';
         }
         editorContent.push(prefix + item.value);
@@ -2165,7 +2144,7 @@ function compareText(text1, text2) {
 function buildLCSMatrix(a, b) {
     // Safety checks
     if (!Array.isArray(a) || !Array.isArray(b)) {
-        console.error('Invalid input: both parameters must be arrays');
+        console.error('❌ Invalid input: both parameters must be arrays');
         return [];
     }
 
