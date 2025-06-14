@@ -544,7 +544,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('📝 Initializing Monaco Editor...');
         await initializeEditor();
         console.log('✅ Monaco Editor initialized');
-        
+
         // Initialize RSA encryption
         console.log('🔐 Setting up encryption...');
         await clientRSA.getPublicKey();
@@ -878,6 +878,7 @@ async function loadFile(fileId) {
             codeEditor.setValue(trimmedContent);
             
             console.log('✅ File loaded successfully');
+            fileID = fileId;
             startPolling();
         }
         
@@ -1922,29 +1923,8 @@ async function showVersion(){
     const version = document.getElementById('input-version-btn').value.trim();
     
     try {
-        let headers = {};
-        
-        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
-            console.log('🔒 Showing version with AES encryption...');
-            headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
-            headers['userID'] = clientRSA.encryptDataAES(userID.toString(), file_AES_key);
-            headers['version'] = version;
-            headers['encrypted'] = 'true';
-        } else {
-            console.log('🔓 Showing version without encryption...');
-            headers['fileID'] = fileID;
-            headers['userID'] = userID;
-            headers['version'] = version;
-        }
-
-        const response = await fetch('/show-version', {
-            method: 'GET',
-            headers: headers
-        });
-
-        const rawData = await response.json();
-        const data = handleEncryptedResponse(rawData,file_AES_key);
-        console.log()
+        const data = await getVersion(version);
+        console.log(data)
 
         if (data.fullContent) {
             Loadeing = true;
@@ -1967,6 +1947,38 @@ async function showVersion(){
     catch (error) {
         console.error('Error showing version:', error);
         showNotification('Error showing version', 'error');
+    }
+}
+
+async function getVersion(version) {    
+    try {
+        let headers = {};
+        
+        if (clientRSA && clientRSA.isEncryptionAvailable() && globalAES_key) {
+            console.log('🔒 Geting version with AES encryption...');
+            headers['fileID'] = clientRSA.encryptDataAES(fileID.toString(), globalAES_key);
+            headers['userID'] = clientRSA.encryptDataAES(userID.toString(), file_AES_key);
+            headers['version'] = version;
+            headers['encrypted'] = 'true';
+        } else {
+            console.log('🔓 Geting version without encryption...');
+            headers['fileID'] = fileID;
+            headers['userID'] = userID;
+            headers['version'] = version;
+        }
+
+        const response = await fetch('/show-version', {
+            method: 'GET',
+            headers: headers
+        });
+
+        const rawData = await response.json();
+        const data = handleEncryptedResponse(rawData,file_AES_key);
+        return data;
+    }
+    catch (error) {
+        console.error('Error geting version:', error);
+        showNotification('Error geting version', 'error');
     }
 }
 
@@ -2057,4 +2069,128 @@ async function getGlobalAES() {
     } catch (error) {
         console.error('Failed to get global AES key:', error);
     }
+}
+
+async function comparingFileToVersion() {
+    stopPolling();
+    setEditorReadOnly(true);
+    const currentFile = codeEditor.getValue().split('\n');
+    const versionNum = document.getElementById('input-version-btn').value.trim();
+    const version = await getVersion(versionNum);
+    
+    if (!version || !version.fullContent) {
+        showNotification('Error: Could not get version content', 'error');
+        return;
+    }
+    
+    const versionContent = version.fullContent.split('\n');
+    const diffResult = compareText(currentFile, versionContent); // This now returns structured data
+    
+    let editorContent = [];
+    let decorations = [];
+    let lineNumber = 1;
+
+    diffResult.forEach(item => {
+        let prefix = '';
+        let className = '';
+        if (item.type === 'add') {
+            prefix = '+ ';
+            className = 'diff-added';
+        } else if (item.type === 'delete') {
+            prefix = '- ';
+            className = 'diff-deleted';
+        } else if (item.type === 'unchanged') {
+            prefix = '  '; // Two spaces for alignment
+            className = 'diff-unchanged';
+        }
+        editorContent.push(prefix + item.value);
+        if (className) {
+            decorations.push({
+                range: new monaco.Range(lineNumber, 1, lineNumber, (item.value ? item.value.length : 0) + prefix.length + 1),
+                options: {
+                    isWholeLine: true,
+                    className: className
+                }
+            });
+        }
+        lineNumber++;
+    });
+
+    isApplyingUpdates = true;
+    codeEditor.setValue(editorContent.join('\n'));
+    const currentDecorations = codeEditor.deltaDecorations([], decorations); // Apply decorations
+    isApplyingUpdates = false;
+
+    // Add a listener to remove decorations when content changes or another version is loaded
+    codeEditor.onDidChangeModelContent(() => {
+        if (!isApplyingUpdates) { // Only clear if not applying updates from diff
+            codeEditor.deltaDecorations(currentDecorations, []); // Clear decorations
+        }
+    });
+
+    const currentFileTab = document.getElementById('current-file-tab');
+    currentFileTab.textContent = selectedFileName + " - compared to V" + versionNum;
+
+    showNotification('Version comparison loaded successfully', 'success');
+}
+
+function compareText(text1, text2) {   
+    // Find Longest Common Subsequence
+    const lcsMatrix = buildLCSMatrix(text1, text2);
+    const diff = [];
+    let i = text1.length, j = text2.length;
+
+    while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && text1[i-1] === text2[j-1]) {
+            // If lines match, they are unchanged
+            diff.unshift({ type: 'unchanged', value: text1[i-1] });
+            i--;
+            j--;
+        } else {
+            if (j > 0 && (i === 0 || lcsMatrix[i][j-1] >= lcsMatrix[i-1][j])) {
+                // If line is added in text2 (new version)
+                diff.unshift({ type: 'add', value: text2[j-1] });
+                j--;
+            } else if (i > 0 && (j === 0 || lcsMatrix[i][j-1] < lcsMatrix[i-1][j])) {
+                // If line is deleted from text1 (old version)
+                diff.unshift({ type: 'delete', value: text1[i-1] });
+                i--;
+            }
+        }
+    }
+    return diff; // Return the raw diff array
+}
+
+
+function buildLCSMatrix(a, b) {
+    // Safety checks
+    if (!Array.isArray(a) || !Array.isArray(b)) {
+        console.error('Invalid input: both parameters must be arrays');
+        return [];
+    }
+
+    // Check for maximum safe array size
+    const MAX_SAFE_LENGTH = 10000; // Adjust this value based on your needs
+    if (a.length > MAX_SAFE_LENGTH || b.length > MAX_SAFE_LENGTH) {
+        console.warn('Input arrays too large, truncating to safe size');
+        a = a.slice(0, MAX_SAFE_LENGTH);
+        b = b.slice(0, MAX_SAFE_LENGTH);
+    }
+
+    const rows = a.length + 1;
+    const columns = b.length + 1;
+    
+    // Create matrix with safe size
+    const matrix = Array.from({ length: rows }, () => Array(columns).fill(0));
+   
+    for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+            if (a[i-1] === b[j-1]) {
+                matrix[i][j] = matrix[i-1][j-1] + 1;
+            } else {
+                matrix[i][j] = Math.max(matrix[i-1][j], matrix[i][j-1]);
+            } 
+        }
+    }
+    return matrix;
 }
