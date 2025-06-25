@@ -782,6 +782,7 @@ async function saveInput(modification) {
         }
 
         const result = await response.text();
+        console.log(result)
         await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
         console.error('❌ Error saving file:', error);
@@ -1285,8 +1286,8 @@ function getRangeAndContent(update) {
 }
 
 async function pollForUpdates() {
-    if (!fileID || !userID) {
-        console.log('Skipping poll - no file or user selected');
+    if (!fileID || !userID || lastModID === undefined || lastModID === null) {
+        console.log('Skipping poll - missing fileID, userID, or lastModID');
         return;
     }
 
@@ -1943,7 +1944,7 @@ async function getVersion(version) {
             headers['version'] = version;
         }
 
-        const response = await fetch('/show-version', {
+        const response = await fetch('/get-version', {
             method: 'GET',
             headers: headers
         });
@@ -2045,7 +2046,6 @@ async function getGlobalAES() {
 
 async function comparingFileToVersion() {
     stopPolling();
-    //stopPolling();
     setEditorReadOnly(true);
     loadingInterval = true;
     const data = await getLoad(fileID);
@@ -2172,4 +2172,41 @@ function buildLCSMatrix(a, b) {
         }
     }
     return matrix;
+}
+
+async function revertToVersion(){
+    try {
+        stopPolling();
+        const versionNum = document.getElementById('input-version-btn').value.trim();
+        const version = await getVersion(versionNum);
+        if (!version || !version.fullContent) {
+            showNotification('Could not get version content', 'error');
+        }
+        else{
+            Loadeing = true;
+            if (version.lastModID !== undefined && version.lastModID !== null)
+                lastModID = version.lastModID;
+
+            const lines = version.fullContent.split('\n');
+            if (lines[lines.length - 1].trim() === '') {
+                lines.pop();}
+            const trimmedContent = lines.join('\n');
+
+            try {
+                await saveAll();
+                codeEditor.setValue(trimmedContent);
+                console.log('✅ File reverted successfully');
+                showNotification("File reverted successfully", 'success')}
+            catch (innerError) {
+                console.error('❌ Error during revert save or setValue:', innerError);
+                showNotification('Error during revert: ' + innerError.message, 'error');
+            }
+            
+            startPolling();
+        }
+    } catch (error) {
+        console.error('❌ Error in revertToVersion:', error);
+        showNotification('Error reverting to version: ' + (error.message || error), 'error');
+        startPolling();
+    }
 }

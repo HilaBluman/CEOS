@@ -389,22 +389,26 @@ def modify_file(row, action, content, file_path, linesLength):
         raise ValueError(f"An error occurred: {e}")
 
 
-def show_version(file_id, user_id, version, client_socket, use_encryption=False):
-    """Show a specific version of a file"""
-    logger.info(f"Showing version {version} of file {file_id} for user {user_id}")
+def get_version(file_id, user_id, version, client_socket, use_encryption=False):
+    """Get a specific version of a file"""
+    logger.info(f"Get version {version} of file {file_id} for user {user_id}")
     
     if not file_id or not user_id or not version:
         logger.error("Missing required parameters: file_id, user_id, or version")
         raise ValueError("File ID, User ID or Version not provided")
     
     fullcontent = version_log_db.get_version_fullcontent(version, file_id)
+    lastID = change_log_db.get_last_mod_id(file_id);
     
     if fullcontent is None:
         logger.warning(f"Version {version} not found for file {file_id}")
         data = {"error": "Version or content not found"}
     else:
-        logger.debug(f"Version content retrieved: {fullcontent[0][:100]}...")
-        data = {"fullContent": fullcontent[0]}
+        #logger.debug(f"Version content retrieved: {fullcontent[0][:100]}...")
+        if lastID and not lastID == None:
+            data = {"fullContent": fullcontent[0], "lastID": lastID}
+        else:
+            data = {"fullContent": fullcontent[0]}
     
     file_key = file_db.get_aes_key(file_id)
     if file_key is None:
@@ -795,9 +799,9 @@ def handle_version_details(client_socket, headers_data):
         client_socket.send(response)
 
 
-def handle_show_version(client_socket, headers_data):
-    """Handle show version requests"""
-    logger.info("Handling show version request")
+def handle_get_version(client_socket, headers_data):
+    """Handle get version requests"""
+    logger.info("Handling get version request")
     
     use_encryption = should_encrypt_response(headers_data)
     
@@ -824,7 +828,7 @@ def handle_show_version(client_socket, headers_data):
         logger.error("Failed to decrypt parameters")
         return
     
-    show_version(file_id, user_id, version, client_socket, use_encryption)
+    get_version(file_id, user_id, version, client_socket, use_encryption)
 
 
 def handle_viewer_status(client_socket, headers_data):
@@ -1055,8 +1059,8 @@ def handle_get_requests(client_socket, request, headers_data, PATH_TO_FOLDER, FO
             handle_user_files(client_socket, headers_data)
         elif "/get-version-details" in request:
             handle_version_details(client_socket, headers_data)
-        elif "/show-version" in request:
-            handle_show_version(client_socket, headers_data)
+        elif "/get-version" in request:
+            handle_get_version(client_socket, headers_data)
         elif "/check-viewer-status" in request: 
             handle_viewer_status(client_socket, headers_data)
         elif "/new-file" in request:
